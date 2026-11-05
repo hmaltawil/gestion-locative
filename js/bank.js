@@ -88,6 +88,8 @@ export function parseBankAmount(s) {
 const RX = {
   date: /date/i,
   valueDate: /valeur|value/i,
+  bookedDate: /complet|comptab|book/i, // Revolut "Completed Date", "Date comptable"
+  state: /^(state|statut|status|état|etat)$/i,
   label: /libell|descri|label|intitul|d[ée]tail|motif|nature|op[ée]ration|wording|payee/i,
   amount: /montant|amount|somme/i,
   debit: /d[ée]bit/i,
@@ -107,6 +109,10 @@ export function guessMapping(rows) {
       else if (RX.label.test(c) && map.label < 0) map.label = i;
     });
     if (map.date < 0) cells.forEach((c, i) => { if (RX.date.test(c) && map.date < 0) map.date = i; });
+    // When there are several dates, the booked one is the reliable one.
+    const booked = cells.findIndex((c) => RX.date.test(c) && RX.bookedDate.test(c));
+    if (booked >= 0) map.date = booked;
+    map.state = cells.findIndex((c) => RX.state.test(c.trim()));
     if (map.date >= 0 && (map.amount >= 0 || map.credit >= 0)) {
       if (map.label < 0) map.label = cells.findIndex((_, i) => ![map.date, map.amount, map.debit, map.credit].includes(i));
       return map;
@@ -125,6 +131,9 @@ export function guessMapping(rows) {
 }
 
 // Rows -> transactions { date, label, amount (cents, positive = money in), fp }.
+// Lines that never reached the account (Revolut and others mark them).
+const SKIP_STATES = /pending|declined|reverted|failed|cancel|annul|refus|en attente/i;
+
 export function toTransactions(rows, map) {
   const out = [];
   const seen = new Map();
@@ -133,6 +142,7 @@ export function toTransactions(rows, map) {
     const row = rows[r];
     const date = parseBankDate(row[map.date]);
     if (!date) continue;
+    if (map.state >= 0 && SKIP_STATES.test(String(row[map.state] || ''))) continue;
     let amount = null;
     if (map.amount >= 0) amount = parseBankAmount(row[map.amount]);
     if (amount === null && (map.credit >= 0 || map.debit >= 0)) {

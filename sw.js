@@ -1,6 +1,6 @@
 // Offline support: keeps a copy of the app files on the phone.
 // Bump VERSION whenever a file changes so phones pick up the update.
-const VERSION = 'v1.1.1';
+const VERSION = 'v1.1.2';
 const CACHE = 'gestion-locative-' + VERSION;
 const FILES = [
   './',

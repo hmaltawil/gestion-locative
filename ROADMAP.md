@@ -51,19 +51,24 @@ Code: [`66c21b7`](https://github.com/hmaltawil/gestion-locative/commit/66c21b7)
 - [x] Appearance setting in Settings: Light (default), Dark, or Automatic (follows the iPhone)
 - [x] The theme is applied before the screen draws, so there's no dark flash at launch
 
+### ✅ Version 1.1.2 · Fixes from the first iPhone check (5 Nov 2026)
+- [x] Calendar: the iPhone share menu doesn't offer Calendar, so there's a new "Open in Calendar" button plus an "email it to yourself" fallback
+- [x] Bank import: a clear message when no incoming payment looks like rent
+- [x] Bank import: Revolut-style files use the booked ("Completed") date and skip pending or declined lines
+
 ---
 
 ## Waiting on you
 
 - ⏳ **Bank CSV sample** (account numbers removed) and the bank's name, to tune the import. This is milestone 4. It's exported from the bank's website, not the monthly PDF statement.
-- ⏳ **First check on the real iPhone.** Report anything that doesn't work:
-  - [ ] Add to Home Screen, then open from the icon
-  - [ ] Share menu: send a receipt by Mail
-  - [ ] Backup to Files › iCloud Drive, then restore it
-  - [ ] Attach a photo with the camera
-  - [ ] Choose a bank CSV file
-  - [ ] Open the calendar file and add the events
-  - [ ] "New version available" bar after an update
+- ⏳ **First check on the real iPhone** (done 5 Nov 2026, two items to retest):
+  - [x] Add to Home Screen, then open from the icon
+  - [x] Share menu: send a receipt by Mail
+  - [x] Backup to Files › iCloud Drive, then restore it
+  - [x] Attach a photo with the camera
+  - [x] "New version available" bar after an update
+  - [ ] **Retest after 1.1.2:** Deadlines › Add to Calendar › **Open in Calendar** (if that fails, "Email the file to yourself")
+  - [ ] **Retest with your real bank's file** (tested with Revolut, which had no rent, so nothing was ticked; this is expected)
 - ⏳ **Legal check, done once:** have the guarantor agreement, formal notice and deposit return letter reviewed, for example by your local ADIL.
 
 ---

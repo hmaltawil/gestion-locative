@@ -19,7 +19,7 @@ import { LINE_2044, taxSummary, yearCsv } from './tax.js';
 import { buildIcs, deadlines, defaultExpiry } from './deadlines.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.1.1';
+export const APP_VERSION = '1.1.2';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -991,6 +991,7 @@ function viewImport() {
           </div>
         </details>
       </section>
+      ${credits.length && !credits.some((x) => (s.choices[x.fp] || {}).leaseId) ? `<p class="note">${esc(t('importNoMatch', { n: credits.length }))}</p>` : ''}
       ${credits.length ? `<p class="hint">${esc(t('importMatchHint'))}</p><section class="card flush"><ul class="list imp-list">${rows}</ul></section>` : empty(t('importNothing'))}
       ${nOn ? `<div class="sticky-cta"><button class="btn block" data-action="importApply">${esc(t('importApply', { n: nOn, amount: fmtMoney(sum) }))}</button></div>` : ''}`,
   });
@@ -1835,6 +1836,8 @@ const changes = {
 
 // ---------------------------------------------------------------- v1.1 handlers
 
+const ICS_URL = './export/echeances-locatives.ics';
+
 Object.assign(actions, {
   // deadlines & reminders
   addReminder: () => reminderSheet(),
@@ -1860,7 +1863,24 @@ Object.assign(actions, {
     if (!items.length) { toast(t('noDeadlines')); return; }
     const events = items.map((i) => ({ uid: i.id, date: i.date, title: `${dlTitle(i)}${i.who && i.who !== '—' ? ' – ' + i.who : ''}`, description: dlSub(i) }));
     const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
-    shareFile(new Blob([buildIcs(events, stamp)], { type: 'text/calendar' }), 'echeances-locatives.ics', 'text/calendar');
+    const blob = new Blob([buildIcs(events, stamp)], { type: 'text/calendar' });
+    // The offline cache serves this file at a normal address, so the iPhone
+    // can open it like a calendar file from a website.
+    const canOpen = 'caches' in window && navigator.serviceWorker && navigator.serviceWorker.controller;
+    const show = (ready) => openSheet(t('addToCalendar'), `
+      <p>${esc(t('icsCount', { n: events.length }))}</p>
+      ${ready ? `<a class="btn block" href="${ICS_URL}?v=${Date.now()}">${icon('calendar')} ${esc(t('openInCalendar'))}</a>
+      <p class="hint">${esc(t('openInCalendarHint'))}</p>` : ''}
+      <button class="btn block secondary" data-action="icsShare">${esc(t('shareIcs'))}</button>
+      <p class="hint">${esc(t('shareIcsHint'))}</p>`, (wrap) => { wrap.blob = blob; });
+    if (!canOpen) { show(false); return; }
+    caches.open('gl-export')
+      .then((c) => c.put(ICS_URL, new Response(blob, { headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Content-Disposition': 'inline; filename="echeances-locatives.ics"' } })))
+      .then(() => show(true), () => show(false));
+  },
+  icsShare: (d, el) => {
+    const wrap = el.closest('.sheet-wrap');
+    if (wrap && wrap.blob) shareFile(wrap.blob, 'echeances-locatives.ics', 'text/calendar');
   },
 
   // monthly batch

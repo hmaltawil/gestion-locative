@@ -193,3 +193,18 @@ test('calendar lines are folded to 75 bytes', () => {
   const unfolded = ics.replace(/\r\n /g, '');
   assert.ok(unfolded.includes('SUMMARY:Révision du loyer à faire – Jean Martin\\, Appartement Gambetta\\, deuxième étage'));
 });
+
+test('bank CSV: Revolut export (booked date, pending and declined lines skipped)', () => {
+  const csv = [
+    'Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance',
+    'CARD_PAYMENT,Current,2026-10-01 12:03:44,2026-10-02 08:11:02,Carrefour,-23.45,0.00,EUR,COMPLETED,1234.56',
+    'TRANSFER,Current,2026-10-05 10:00:00,2026-10-05 10:00:02,Transfer from JEAN MARTIN,850.00,0.00,EUR,COMPLETED,2184.56',
+    'CARD_PAYMENT,Current,2026-10-06 18:30:00,,Amazon,-15.00,0.00,EUR,PENDING,',
+    'CARD_PAYMENT,Current,2026-10-07 11:00:00,2026-10-07 11:00:00,Refused shop,-40.00,0.00,EUR,DECLINED,2184.56',
+  ].join('\n');
+  const { rows } = parseCsv(csv);
+  const map = guessMapping(rows);
+  assert.equal(map.date, 3);
+  const txs = toTransactions(rows, map);
+  assert.deepEqual(txs.map((t) => [t.date, t.amount]), [['2026-10-02', -2345], ['2026-10-05', 85000]]);
+});

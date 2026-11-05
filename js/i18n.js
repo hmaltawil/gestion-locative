@@ -231,6 +231,11 @@ const fr = {
 
   backupReady: 'Sauvegarde prête ({size}, dont {n} documents).', backupSaveHint: 'Choisissez « Enregistrer dans Fichiers » puis iCloud Drive.',
   saveToFiles: 'Enregistrer la sauvegarde',
+  importNoMatch: "Aucune de ces {n} entrées ne ressemble à un loyer de vos locataires, donc rien n'est coché. Si l'une est un loyer, choisissez le bail ; sinon il n'y a rien à importer.",
+  icsCount: '{n} échéances à venir.', openInCalendar: 'Ouvrir dans Calendrier',
+  openInCalendarHint: "L'iPhone propose « Tout ajouter ». Si l'app reste ensuite sur une page vide, fermez-la et rouvrez-la.",
+  shareIcs: "S'envoyer le fichier par e-mail",
+  shareIcsHint: 'Autre solution : choisissez Mail, envoyez-le-vous, puis touchez la pièce jointe dans Mail et « Tout ajouter ».',
   appearance: 'Apparence', theme_light: 'Clair', theme_dark: 'Sombre', theme_auto: 'Automatique',
   themeHint: 'Automatique suit le réglage clair ou sombre de l\'iPhone.',
 };
@@ -466,6 +471,11 @@ const en = {
 
   backupReady: 'Backup ready ({size}, including {n} documents).', backupSaveHint: 'Choose "Save to Files", then iCloud Drive.',
   saveToFiles: 'Save the backup',
+  importNoMatch: "None of these {n} incoming payments looks like rent from your tenants, so nothing is ticked. If one is rent, choose its lease; otherwise there is nothing to import.",
+  icsCount: '{n} upcoming deadlines.', openInCalendar: 'Open in Calendar',
+  openInCalendarHint: 'The iPhone offers "Add All". If the app then stays on a blank page, close it and open it again.',
+  shareIcs: 'Email the file to yourself',
+  shareIcsHint: 'Another way: choose Mail, send it to yourself, then tap the attachment in Mail and "Add All".',
   appearance: 'Appearance', theme_light: 'Light', theme_dark: 'Dark', theme_auto: 'Automatic',
   themeHint: 'Automatic follows the iPhone\'s light or dark setting.',
 };
