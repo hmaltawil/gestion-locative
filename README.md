@@ -2,6 +2,8 @@
 
 A rental management web app for a private landlord in France. It works offline, can be added to an iPhone home screen, and shows its screens in French or English. The PDF documents are always in French.
 
+What's done and what's planned: see [ROADMAP.md](ROADMAP.md).
+
 ## What it does
 
 **Everyday**
