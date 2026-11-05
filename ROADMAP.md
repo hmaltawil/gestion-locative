@@ -55,7 +55,7 @@ Code: [`66c21b7`](https://github.com/hmaltawil/gestion-locative/commit/66c21b7)
 
 ## Waiting on you
 
-- ⏳ **Bank CSV sample** (account numbers removed) and the bank's name, to tune the import. This is milestone 4.
+- ⏳ **Bank CSV sample** (account numbers removed) and the bank's name, to tune the import. This is milestone 4. It's exported from the bank's website, not the monthly PDF statement.
 - ⏳ **First check on the real iPhone.** Report anything that doesn't work:
   - [ ] Add to Home Screen, then open from the icon
   - [ ] Share menu: send a receipt by Mail
@@ -77,11 +77,17 @@ Data lives only on the phone, so protecting it comes first.
 - [ ] Backup status in Settings: last snapshot, last off-device backup, any errors
 - [ ] One-tap manual backup, prepared in the background
 
-### Milestone 4 · Version 1.3 · Bank import, tuned to your bank
-- [ ] Adapt column and date detection to your bank's export
+### Milestone 4 · Version 1.3 · Bank import and semi-automatic follow-up
+Goal: a monthly routine of about 5 minutes. Download the bank file, import it, then tap through receipts and reminders.
+- [ ] Adapt column and date detection to your bank's export (support OFX or Excel too, if your bank has no CSV)
 - [ ] Optionally import money going out as expenses, with a suggested category
 - [ ] Remember "this label always means this lease or this expense category"
 - [ ] Handle the CAF paying part of the rent directly to you
+- [ ] **Action screen after each import** (decided 5 Nov 2026):
+  - payments matched, each with "send receipt" ready
+  - tenants still unpaid a set number of days after the due date (5 by default), each with "send reminder" ready
+  - one tap per email (iOS rule); nothing is sent without your tap, so a wrong match never becomes a wrong receipt
+  - each item marked as sent, so nothing is sent twice
 
 ### Milestone 5 · Version 1.4 · Fixes from real use
 - [ ] Bugs and annoyances found on the iPhone
@@ -97,7 +103,7 @@ Data lives only on the phone, so protecting it comes first.
 | Lease contract from the official model lease | Large | Legal review needed; only worth it if you sign new leases often |
 | Move-in/move-out inspection with photos and signatures on the iPhone | Large | Move-out compared against move-in; feeds the deposit return |
 | Sync across devices (iPhone, iPad, computer) | Large | Needs a backend, for example a free Supabase account, plus a login |
-| Emails sent automatically each month | Medium | Needs a server or email service |
+| Full automation: bank checked daily, receipts and reminders sent by themselves | Very large (about 3 milestones) | Needs data in the cloud with a login, a bank-connection provider, an email service and a domain name; about €0 to €15 a month. **Decided against for now (5 Nov 2026):** revisit after a few months of the semi-automatic routine |
 | Legally strong e-signature | Medium | Needs a paid service such as Yousign |
 
 ## Ideas backlog
