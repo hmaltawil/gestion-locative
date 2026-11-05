@@ -72,7 +72,7 @@ Code: [`66c21b7`](https://github.com/hmaltawil/gestion-locative/commit/66c21b7)
 
 ## Waiting on you
 
-- ⏳ **Set up the GitHub backup (5 minutes):** Settings › Automatic backup (GitHub) › "How to set it up". Write the passphrase on paper.
+- ✅ **GitHub backup set up** (5 Nov 2026) to the private repository `locatif-sauvegarde`. Passphrase on paper; revoke the token on GitHub if the phone is lost.
 - ⏳ **Optional, fewer permission prompts for Claude:** add `.claude/settings.json` to this repository yourself (Claude isn't allowed to change its own permissions).
 - ⏳ **Bank CSV sample** (account numbers removed) and the bank's name, to tune the import. This is milestone 4. It's exported from the bank's website, not the monthly PDF statement.
 - ✅ **First check on the real iPhone:** everything works (5 Nov 2026)
