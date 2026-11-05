@@ -11,7 +11,7 @@ One place to see what's done, what's waiting, and what comes next. Update it at 
 3. **A milestone is done when:**
    - the calculation tests pass (`npm test`), and the new screens have been run in a phone-sized browser;
    - `VERSION` in `sw.js` and `APP_VERSION` in `js/app.js` are bumped;
-   - the README and this file are updated, and the version is tagged in git (`v1.2.0`…);
+   - the README and this file are updated, with the milestone's commit linked below;
    - it has been checked on the real iPhone (see [Waiting](#waiting-on-you)).
 4. **Bugs found on the iPhone** go at the top of the next milestone.
 
@@ -20,6 +20,8 @@ One place to see what's done, what's waiting, and what comes next. Update it at 
 ## Done
 
 ### ✅ Milestone 1 · Version 1.0 · Foundation (5 Nov 2026)
+Code: [`61657c1`](https://github.com/hmaltawil/gestion-locative/commit/61657c1)
+
 - [x] Offline web app, installable on the iPhone home screen, hosted on GitHub Pages
 - [x] French and English screens; PDF documents always in French
 - [x] Properties (with DPE rating) and leases (co-tenants, guarantor, deposit, payment day)
@@ -31,6 +33,8 @@ One place to see what's done, what's waiting, and what comes next. Update it at 
 - [x] Manual backup and restore (a JSON file in iCloud Drive), with a reminder after 7 days
 
 ### ✅ Milestone 2 · Version 1.1 · Landlord toolkit (5 Nov 2026)
+Code: [`66c21b7`](https://github.com/hmaltawil/gestion-locative/commit/66c21b7)
+
 - [x] Monthly send: all receipts or rent calls for a month, one per tenant or all in one PDF
 - [x] Bank statement import (any bank's CSV) with automatic matching to leases, no duplicates
 - [x] Yearly charges reconciliation: letter, balance added to the tenant's account, new monthly advance
