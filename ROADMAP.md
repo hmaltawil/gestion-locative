@@ -47,6 +47,10 @@ Code: [`66c21b7`](https://github.com/hmaltawil/gestion-locative/commit/66c21b7)
 - [x] One-off charges and credits on a lease
 - [x] Reliable updates: new versions are detected and always install fresh files
 
+### ✅ Version 1.1.1 · Light theme (5 Nov 2026)
+- [x] Appearance setting in Settings: Light (default), Dark, or Automatic (follows the iPhone)
+- [x] The theme is applied before the screen draws, so there's no dark flash at launch
+
 ---
 
 ## Waiting on you

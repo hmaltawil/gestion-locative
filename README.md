@@ -7,6 +7,7 @@ What's done and what's planned: see [ROADMAP.md](ROADMAP.md).
 ## What it does
 
 **Everyday**
+- **Appearance:** light by default; dark or automatic (follows the iPhone) in Settings.
 - **Properties and leases:** tenants and co-tenants, guarantor, deposit, payment day, energy rating (DPE), tenant insurance date.
 - **Rent tracking:** a month-by-month view with paid, partial, unpaid and late statuses. Payments always clear the oldest debt first. First and last months are pro-rated. Already-running leases can start with an opening balance. One-off charges or credits can be added to a lease.
 - **Monthly send:** all receipts or rent calls for a month. Each tenant's PDF goes out in one tap (their email is copied first), or everything can be saved as one PDF for printing.

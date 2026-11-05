@@ -17,6 +17,7 @@ export function emptyState() {
       signature: null,
       lastBackup: null,
       irlUpdated: null,
+      theme: 'light', // 'light' (default), 'dark' or 'auto' (follows the iPhone)
     },
     irl: {},
     properties: [],

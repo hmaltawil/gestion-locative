@@ -19,7 +19,7 @@ import { LINE_2044, taxSummary, yearCsv } from './tax.js';
 import { buildIcs, deadlines, defaultExpiry } from './deadlines.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.1.1';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -662,6 +662,13 @@ function viewSettings() {
           <button type="button" data-action="lang" data-lang="en" class="${s.lang === 'en' ? 'active' : ''}">English</button>
         </div>
         <p class="hint">${esc(t('docsAlwaysFrench'))}</p>
+      </section>
+      <section class="card">
+        <h3>${esc(t('appearance'))}</h3>
+        <div class="segmented">
+          ${['light', 'dark', 'auto'].map((x) => `<button type="button" data-action="theme" data-theme="${x}" class="${(s.theme || 'light') === x ? 'active' : ''}">${esc(t('theme_' + x))}</button>`).join('')}
+        </div>
+        <p class="hint">${esc(t('themeHint'))}</p>
       </section>
       <form class="card form" data-form="landlord">
         <h3>${esc(t('landlordTitle'))}</h3>
@@ -1547,6 +1554,10 @@ const actions = {
     commit((s) => { s.expenses = s.expenses.filter((x) => x.id !== d.id); removeDocs((doc) => doc.ownerId === d.id); });
     location.hash = '#/expenses';
   },
+  theme: (d) => {
+    applyTheme(d.theme);
+    commit((s) => { s.settings.theme = d.theme; });
+  },
   lang: (d) => {
     commit((s) => { s.settings.lang = d.lang; });
     setLang(d.lang);
@@ -1604,6 +1615,7 @@ const actions = {
         await restoreFiles(files);
         state = next;
         setLang(state.settings.lang);
+        applyTheme(state.settings.theme);
         await persist();
         location.hash = '#/';
         render();
@@ -2252,6 +2264,26 @@ function registerServiceWorker() {
   });
 }
 
+// Light is the default. index.html applies the last choice before the page
+// draws (from localStorage), so there is no dark flash; this keeps it in sync.
+const THEME_COLORS = { light: '#f4f5f7', dark: '#111317' };
+const darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+function applyTheme(theme) {
+  const choice = ['light', 'dark', 'auto'].includes(theme) ? theme : 'light';
+  const html = document.documentElement;
+  if (choice === 'auto') delete html.dataset.theme;
+  else html.dataset.theme = choice;
+  const effective = choice === 'auto' ? (darkQuery && darkQuery.matches ? 'dark' : 'light') : choice;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', THEME_COLORS[effective]);
+  try { localStorage.setItem('gl-theme', choice); } catch (e) { /* private mode */ }
+}
+
+if (darkQuery && darkQuery.addEventListener) {
+  darkQuery.addEventListener('change', () => { if ((state.settings.theme || 'light') === 'auto') applyTheme('auto'); });
+}
+
 async function boot() {
   try {
     state = await loadState();
@@ -2261,6 +2293,15 @@ async function boot() {
   }
   setLang(state.settings.lang);
   document.documentElement.lang = state.settings.lang;
+  // The theme is also saved instantly in localStorage when tapped, so it wins
+  // if the app was closed before the main save finished.
+  let saved = null;
+  try { saved = localStorage.getItem('gl-theme'); } catch (e) { /* private mode */ }
+  if (['light', 'dark', 'auto'].includes(saved) && saved !== state.settings.theme) {
+    state.settings.theme = saved;
+    persist();
+  }
+  applyTheme(state.settings.theme);
   render();
   askPersistentStorage();
   registerServiceWorker();

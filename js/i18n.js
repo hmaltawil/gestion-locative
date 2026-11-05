@@ -231,6 +231,8 @@ const fr = {
 
   backupReady: 'Sauvegarde prête ({size}, dont {n} documents).', backupSaveHint: 'Choisissez « Enregistrer dans Fichiers » puis iCloud Drive.',
   saveToFiles: 'Enregistrer la sauvegarde',
+  appearance: 'Apparence', theme_light: 'Clair', theme_dark: 'Sombre', theme_auto: 'Automatique',
+  themeHint: 'Automatique suit le réglage clair ou sombre de l\'iPhone.',
 };
 
 const en = {
@@ -464,6 +466,8 @@ const en = {
 
   backupReady: 'Backup ready ({size}, including {n} documents).', backupSaveHint: 'Choose "Save to Files", then iCloud Drive.',
   saveToFiles: 'Save the backup',
+  appearance: 'Appearance', theme_light: 'Light', theme_dark: 'Dark', theme_auto: 'Automatic',
+  themeHint: 'Automatic follows the iPhone\'s light or dark setting.',
 };
 
 const DICTS = { fr, en };
