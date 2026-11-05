@@ -323,3 +323,8 @@ details summary { cursor: pointer; color: var(--accent); margin: 4px 0 10px; }
 fieldset.card { min-width: 0; margin-inline: 0; }
 fieldset.card:disabled { opacity: .75; }
 .list.compact > li > span:last-child { white-space: nowrap; text-align: right; }
+
+/* v1.2 */
+.row.tight { padding: 8px 0; }
+.btn-row.spaced-top { margin-top: 10px; justify-content: space-between; }
+#sync-status p { margin-bottom: 8px; }

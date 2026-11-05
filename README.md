@@ -31,10 +31,14 @@ What's done and what's planned: see [ROADMAP.md](ROADMAP.md).
 
 ## Where the data lives
 
-All data, including attached documents, is stored on the device itself (IndexedDB) and never sent anywhere. Bank files are read on the phone. The only network request is the optional IRL update to `bdm.insee.fr`.
+All data, including attached documents, is stored on the device itself (IndexedDB). Bank files are read on the phone. Network requests: the optional IRL update (`bdm.insee.fr`) and, only if you turn it on, the encrypted GitHub backup (`api.github.com`).
 
-- **Back up regularly:** Settings › Back up › Save to Files › iCloud Drive. The app reminds you when the last backup is more than 7 days old.
-- **Deleting the home-screen icon deletes the data.** Restore from a backup if needed.
+Three layers of protection:
+1. **Automatic copies on the phone** (Settings › Automatic copies): one a day for 14 days, plus one before every import, restore, deletion or erase. They undo mistakes, but they're lost with the phone.
+2. **Automatic backup to GitHub** (Settings › Automatic backup): after each change, an encrypted copy goes to a **private** repository of your own. It's encrypted on the phone with AES-256-GCM and a key derived from your passphrase (PBKDF2-SHA-256, 310,000 iterations), so GitHub only stores unreadable files, and every version is kept. The access token and passphrase stay on the phone and are never included in backups. **Keep the passphrase on paper:** without it the backups can't be read.
+3. **Manual backup file** (Settings › Manual backup › Back up › Save to Files › iCloud Drive). The app reminds you if neither this nor the GitHub backup has run for 7 days.
+
+- **Deleting the home-screen icon deletes the data on the phone.** Restore from GitHub or from a backup file.
 - **The home-screen app and Safari have separate storage.** Always open the app from its icon.
 
 ## Install on iPhone
@@ -69,6 +73,9 @@ npm run serve     # http://localhost:8080
 - `js/charges.js`: charges reconciliation, deposit return, lease terms.
 - `js/tax.js`: form 2044 summary and the CSV export.
 - `js/deadlines.js`: deadlines and the calendar (.ics) file.
+- `js/crypto.js`: encryption of the GitHub backup (Web Crypto).
+- `js/sync.js`: the GitHub backup (REST API: upload, versions, restore).
+- `js/snapshots.js`: rules for the automatic copies kept on the phone.
 - `js/docs.js`: the PDF documents, built with jsPDF from `vendor/` (MIT licence).
 - `js/irl.js`: the built-in IRL table and the INSEE fetch.
 - `js/store.js`: on-device storage, backup and restore.

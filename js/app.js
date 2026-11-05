@@ -7,8 +7,14 @@ import {
 } from './calc.js';
 import { fetchInseeIrl, fmtIrlKey, irlKey, irlTable, latestIrlKey } from './irl.js';
 import {
-  askPersistentStorage, backupBlob, clearFiles, deleteFile, emptyState, getFile, loadState, parseBackup, putFile, restoreFiles, saveState,
+  allFileIds, askPersistentStorage, backupBlob, deleteFile, deleteSnapshot, emptyState, getFile, getSnapshot, listSnapshots,
+  loadSecrets, loadState, normalize, parseBackup, putFile, putSnapshot, restoreFiles, saveSecrets, saveState,
 } from './store.js';
+import { counts as snapCounts, expiredTrash, needsDaily, toPrune } from './snapshots.js';
+import { decryptBytes, decryptJson, encryptBytes, encryptJson, newKeySession } from './crypto.js';
+import {
+  DATA_PATH, SyncError, checkRepo, docPath, getSha, listVersions, parseRepo, putFile as ghPut, readFile,
+} from './sync.js';
 import {
   deliver, departurePdf, depositReceiptPdf, formalNoticePdf, guarantorPdf, indexationPdf, newPdf, receiptPdf, regularizationPdf,
   reminderPdf, rentCallPdf, rentCertificatePdf, shareFile, taxSummaryPdf,
@@ -19,7 +25,7 @@ import { LINE_2044, taxSummary, yearCsv } from './tax.js';
 import { buildIcs, deadlines, defaultExpiry } from './deadlines.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.1.2';
+export const APP_VERSION = '1.2.0';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -39,6 +45,7 @@ function commit(fn) {
   fn(state);
   persist();
   render();
+  afterChange();
 }
 
 const byId = (list, id) => list.find((x) => x.id === id);
@@ -223,8 +230,11 @@ function render() {
 
 function needsBackup() {
   if (!state.leases.length && !state.properties.length) return false;
+  const weekAgo = addDays(today(), -7);
+  const m = gh() ? syncMeta() : null;
+  if (m && m.lastOk && m.lastOk.slice(0, 10) >= weekAgo) return false; // the GitHub backup is working
   const last = state.settings.lastBackup;
-  return !last || last < addDays(today(), -7);
+  return !last || last < weekAgo;
 }
 
 function viewHome() {
@@ -280,6 +290,7 @@ function viewHome() {
   return page({
     title: fmtPeriodCap(ov.period, state.settings.lang),
     body: `
+      ${safetyBanners()}
       ${needsBackup() ? `<div class="banner warn"><span>${esc(state.settings.lastBackup ? t('backupOld', { date: fmtDate(state.settings.lastBackup) }) : t('backupNever'))}</span><button class="btn small" data-action="backup">${esc(t('backupNow'))}</button></div>` : ''}
       ${!state.settings.landlord.name ? `<a class="banner" href="#/settings">${esc(t('missingLandlord'))}</a>` : ''}
       <div class="tiles">
@@ -702,6 +713,7 @@ function viewSettings() {
         <p class="hint">${esc(t('irlLatest', { key: fmtIrlKey(latest, s.lang) }))}${s.irlUpdated ? ' ' + esc(t('irlUpdatedOn', { date: fmtDate(s.irlUpdated) })) : ''}</p>
         <button class="btn secondary" data-action="irlUpdate">${esc(t('irlUpdate'))}</button>
       </section>
+      ${githubCard()}
       <section class="card">
         <h3>${esc(t('backupTitle'))}</h3>
         <p class="hint">${esc(t('backupHint'))}</p>
@@ -712,6 +724,7 @@ function viewSettings() {
         </div>
         <p class="hint">${esc(t('dataCounts', { p: state.properties.length, l: state.leases.length, pay: state.payments.length, e: state.expenses.length }))} · ${esc(t('docCount', { n: state.documents.length }))}</p>
       </section>
+      ${snapshotsCard()}
       <section class="card">
         <h3>${esc(t('about'))}</h3>
         <p class="hint">${esc(t('aboutText', { v: APP_VERSION }))}</p>
@@ -1257,9 +1270,10 @@ async function docOpenSheet(id) {
     <button class="btn block" data-action="docShare" data-id="${id}">${esc(t('openShare'))}</button>`, (wrap) => { wrap.blob = blob; });
 }
 
+// The files stay 15 days in the trash, so restoring a snapshot brings them back.
 function removeDocs(predicate) {
   const gone = state.documents.filter(predicate);
-  for (const d of gone) deleteFile(d.id).catch(() => {});
+  state.trash = [...(state.trash || []), ...gone.map((d) => ({ id: d.id, deletedOn: today() }))];
   state.documents = state.documents.filter((d) => !predicate(d));
 }
 
@@ -1350,10 +1364,319 @@ function lettersSheet(leaseId) {
     </form>`);
 }
 
+// ================================================================ v1.2 data safety
+// Off-site backup settings live outside the app data, so they never end up in
+// backups, snapshots or on GitHub: { github: { repo, token, passphrase, tokenExpires }, sync: {...} }
+let secrets = {};
+let commitCount = 0;
+let prepared = null; // a manual backup file ready to share in one tap: { blob, count }
+let lastDailyDay = null;
+
+const gh = () => (secrets.github && secrets.github.token ? secrets.github : null);
+const syncMeta = () => (secrets.sync = secrets.sync || {});
+const hasData = (s = state) => s.properties.length > 0 || s.leases.length > 0;
+
+function pad(n) { return String(n).padStart(2, '0'); }
+function fmtDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Called after every change to the data.
+function afterChange() {
+  commitCount++;
+  markDirty();
+  dailySnapshot();
+}
+
+// ---------- snapshots ----------
+async function takeSnapshot(reason) {
+  if (!hasData()) return;
+  try {
+    await putSnapshot({ id: uid(), at: new Date().toISOString(), day: today(), reason, counts: snapCounts(state), state });
+    const list = await listSnapshots();
+    for (const id of toPrune(list, today())) await deleteSnapshot(id);
+  } catch (e) {
+    console.warn('snapshot failed', e);
+  }
+}
+
+async function dailySnapshot() {
+  const td = today();
+  if (lastDailyDay === td || !hasData()) return;
+  lastDailyDay = td;
+  try {
+    if (needsDaily(await listSnapshots(), td)) await takeSnapshot('daily');
+  } catch (e) { /* ignore */ }
+}
+
+// Deleted documents keep their file 15 days; files nothing refers to are removed.
+async function cleanFiles() {
+  try {
+    const expired = expiredTrash(state.trash, today());
+    if (expired.length) {
+      const ids = new Set(expired.map((x) => x.id));
+      state.trash = state.trash.filter((x) => !ids.has(x.id));
+      await persist();
+    }
+    const keep = new Set([...state.documents.map((d) => d.id), ...state.trash.map((d) => d.id)]);
+    for (const snap of await listSnapshots()) for (const d of (snap.state.documents || [])) keep.add(d.id);
+    for (const id of await allFileIds()) if (!keep.has(id)) await deleteFile(id);
+  } catch (e) { /* ignore */ }
+}
+
+async function fillSnapshotList() {
+  const box = document.getElementById('snap-list');
+  if (!box) return;
+  let list = [];
+  try { list = await listSnapshots(); } catch (e) { /* ignore */ }
+  if (!list.length) { box.innerHTML = `<p class="muted small">${esc(t('noSnapshots'))}</p>`; return; }
+  box.innerHTML = `<ul class="list plain">${list.slice(0, 30).map((s) => `<li class="row tight">
+    <div class="row-main"><strong>${esc(fmtDateTime(s.at))}</strong><span class="muted small">${esc(t('snap_' + s.reason))} · ${esc(t('snapCounts', s.counts || {}))}</span></div>
+    <button class="btn small secondary" data-action="snapRestore" data-id="${s.id}">${esc(t('snapRestore'))}</button></li>`).join('')}</ul>`;
+}
+
+async function restoreSnapshot(id) {
+  const snap = await getSnapshot(id);
+  if (!snap) return;
+  if (!confirm(t('confirmSnapRestore', { date: fmtDateTime(snap.at), ...snap.counts }))) return;
+  await takeSnapshot('beforeRestore');
+  state = normalize(snap.state);
+  setLang(state.settings.lang);
+  applyTheme(state.settings.theme);
+  await persist();
+  afterChange();
+  location.hash = '#/';
+  render();
+  toast(t('snapRestored'));
+}
+
+// ---------- automatic encrypted backup to GitHub ----------
+let syncTimer = null;
+let syncing = false;
+let syncAgain = false;
+
+function markDirty() {
+  if (!gh()) return;
+  syncMeta().dirty = true;
+  saveSecrets(secrets).catch(() => {});
+  scheduleSync();
+}
+
+function scheduleSync(delay = 8000) {
+  if (!gh()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => runSync(), delay);
+}
+
+async function runSync() {
+  const g = gh();
+  if (!g) return;
+  if (syncing) { syncAgain = true; return; }
+  syncing = true;
+  syncAgain = false;
+  const meta = syncMeta();
+  const startCount = commitCount;
+  meta.lastAttempt = new Date().toISOString();
+  updateSyncStatus(true);
+  try {
+    const cfg = { repo: g.repo, token: g.token };
+    if (!hasData()) {
+      // Never replace a backup with an empty phone; tell a new phone to restore instead.
+      if (!meta.dataSha && await getSha(cfg, DATA_PATH)) throw new SyncError('remote-exists');
+      meta.dirty = false;
+      return;
+    }
+    const session = await newKeySession(g.passphrase);
+    const stamp = fmtDateTime(meta.lastAttempt);
+    const uploaded = new Set(meta.uploadedDocs || []);
+    for (const d of state.documents) {
+      if (uploaded.has(d.id)) continue;
+      const f = await getFile(d.id);
+      if (!f) continue;
+      const env = await encryptBytes(new Uint8Array(f.data), g.passphrase, session);
+      await ghPut(cfg, docPath(d.id), env, `Document ${stamp}`);
+      uploaded.add(d.id);
+      meta.uploadedDocs = [...uploaded];
+      await saveSecrets(secrets);
+    }
+    const env = await encryptJson({ app: 'gestion-locative', exportedAt: new Date().toISOString(), state }, g.passphrase, session);
+    meta.dataSha = await ghPut(cfg, DATA_PATH, env, `Sauvegarde automatique ${stamp}`, meta.dataSha);
+    meta.lastOk = new Date().toISOString();
+    meta.lastError = null;
+    meta.dirty = commitCount !== startCount;
+    if (meta.dirty) syncAgain = true;
+  } catch (e) {
+    console.warn('backup failed', e);
+    meta.lastError = (e && e.code) || 'unknown';
+  } finally {
+    syncing = false;
+    await saveSecrets(secrets).catch(() => {});
+    updateSyncStatus(false);
+    if (syncAgain) scheduleSync(3000);
+  }
+}
+
+function syncStatusHtml(running) {
+  if (!gh()) return '';
+  const m = syncMeta();
+  let h = `<p>${esc(m.lastOk ? t('syncLastOk', { date: fmtDateTime(m.lastOk) }) : t('syncNever'))}</p>`;
+  if (running) h += `<p class="muted small">${esc(t('syncRunning'))}</p>`;
+  else if (m.lastError) h += `<p class="note warn">${esc(t('syncFailed', { reason: t('syncErr_' + m.lastError) }))}</p>`;
+  return h;
+}
+
+function updateSyncStatus(running) {
+  const el = document.getElementById('sync-status');
+  if (el) el.innerHTML = syncStatusHtml(running);
+}
+
+function safetyBanners() {
+  const g = gh();
+  if (!g) return '';
+  const m = syncMeta();
+  let out = '';
+  if (m.lastError && (!m.lastOk || m.lastOk.slice(0, 10) < addDays(today(), -2))) {
+    out += `<a class="banner warn" href="#/settings">${esc(t('syncFailingBanner', { reason: t('syncErr_' + m.lastError) }))}</a>`;
+  }
+  if (g.tokenExpires && g.tokenExpires <= addDays(today(), 14)) {
+    out += `<a class="banner warn" href="#/settings">${esc(t('tokenExpiring', { date: fmtDate(g.tokenExpires) }))}</a>`;
+  }
+  return out;
+}
+
+function githubCard() {
+  const g = gh();
+  if (g) {
+    return `<section class="card">
+      <h3>${esc(t('ghTitle'))}</h3>
+      <p>${esc(t('ghConnectedTo', { repo: g.repo }))}${g.tokenExpires ? ` <span class="muted small">· ${esc(t('ghTokenUntil', { date: fmtDate(g.tokenExpires) }))}</span>` : ''}</p>
+      <div id="sync-status">${syncStatusHtml(syncing)}</div>
+      <div class="btn-row">
+        <button class="btn" data-action="syncNow">${esc(t('syncNow'))}</button>
+        <button class="btn secondary" data-action="ghRestore">${esc(t('ghRestore'))}</button>
+      </div>
+      <div class="btn-row spaced-top">
+        <button class="link" data-action="ghToken">${esc(t('ghChangeToken'))}</button>
+        <button class="link danger" data-action="ghDisconnect">${esc(t('ghDisconnect'))}</button>
+      </div>
+    </section>`;
+  }
+  return `<section class="card">
+    <h3>${esc(t('ghTitle'))}</h3>
+    <p class="hint">${esc(t('ghIntro'))}</p>
+    <details><summary>${esc(t('ghHowTo'))}</summary>
+      <ol class="steps small">
+        <li>${esc(t('ghStep1'))}</li>
+        <li>${esc(t('ghStep2'))}</li>
+        <li>${esc(t('ghStep3'))}</li>
+        <li>${esc(t('ghStep4'))}</li>
+      </ol>
+    </details>
+    <form class="form" data-form="ghConnect">
+      ${field(t('ghRepo'), input('repo', '', `required autocomplete="off" autocapitalize="off" placeholder="${esc(t('ghRepoPh'))}"`))}
+      ${field(t('ghToken'), input('token', '', 'type="password" required autocomplete="off"'), t('ghTokenHint'))}
+      ${field(t('ghTokenExpires'), input('tokenExpires', '', 'type="date"'), t('ghTokenExpiresHint'))}
+      <div class="grid2">
+        ${field(t('ghPassphrase'), input('passphrase', '', 'type="password" required autocomplete="new-password"'))}
+        ${field(t('ghPassphrase2'), input('passphrase2', '', 'type="password" required autocomplete="new-password"'))}
+      </div>
+      <p class="note warn">${esc(t('ghPassphraseHint'))}</p>
+      <button class="btn block" type="submit">${esc(t('ghConnect'))}</button>
+    </form>
+  </section>`;
+}
+
+function snapshotsCard() {
+  return `<section class="card">
+    <h3>${esc(t('snapshotsTitle'))}</h3>
+    <p class="hint">${esc(t('snapshotsHint'))}</p>
+    <div id="snap-list"><p class="muted small">…</p></div>
+  </section>`;
+}
+
+async function ghRestoreSheet(intro) {
+  const g = gh();
+  if (!g) return;
+  openSheet(t('ghVersions'), `<p class="muted">${esc(t('ghLoading'))}</p>`);
+  let versions = [];
+  try {
+    versions = await listVersions({ repo: g.repo, token: g.token });
+  } catch (e) {
+    closeSheet();
+    toast(t('syncErr_' + ((e && e.code) || 'unknown')), 'error');
+    return;
+  }
+  openSheet(t('ghVersions'), `${intro ? `<p class="note">${esc(intro)}</p>` : ''}
+    <p class="hint">${esc(t('ghVersionsHint'))}</p>
+    ${versions.length ? `<ul class="list plain">${versions.map((v, i) => `<li class="row tight">
+      <div class="row-main"><strong>${esc(fmtDateTime(v.date))}</strong><span class="muted small">${i === 0 ? esc(t('ghLatest')) : ''}</span></div>
+      <button class="btn small${i === 0 ? '' : ' secondary'}" data-action="ghRestoreVersion" data-sha="${esc(v.sha)}">${esc(t('snapRestore'))}</button></li>`).join('')}</ul>` : `<p class="muted">${esc(t('ghNoVersions'))}</p>`}`);
+}
+
+async function ghRestoreVersion(sha) {
+  const g = gh();
+  const cfg = { repo: g.repo, token: g.token };
+  toast(t('ghLoading'));
+  try {
+    const text = await readFile(cfg, DATA_PATH, sha);
+    if (!text) throw new SyncError('unknown');
+    const payload = await decryptJson(text, g.passphrase);
+    const next = normalize(payload.state);
+    if (!confirm(t('confirmGhRestore', { date: fmtDateTime(payload.exportedAt), p: next.properties.length, l: next.leases.length, pay: next.payments.length }))) return;
+    await takeSnapshot('beforeRestore');
+    let missing = 0;
+    for (const d of next.documents) {
+      if (await getFile(d.id)) continue;
+      const env = await readFile(cfg, docPath(d.id));
+      if (!env) { missing++; continue; }
+      const bytes = await decryptBytes(env, g.passphrase);
+      await putFile(d.id, { name: d.name, type: d.type, data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) });
+    }
+    state = next;
+    const m = syncMeta();
+    m.dataSha = await getSha(cfg, DATA_PATH);
+    m.uploadedDocs = next.documents.map((d) => d.id);
+    m.lastError = null;
+    await saveSecrets(secrets);
+    setLang(state.settings.lang);
+    applyTheme(state.settings.theme);
+    await persist();
+    commitCount++;
+    closeSheet();
+    location.hash = '#/';
+    render();
+    toast(missing ? t('ghDocsMissing', { n: missing }) : t('ghRestored'));
+  } catch (e) {
+    toast(t('syncErr_' + ((e && e.code) || (e && e.message) || 'unknown')), 'error');
+  }
+}
+
+function ghTokenSheet() {
+  openSheet(t('ghChangeToken'), `<form class="form" data-form="ghToken">
+    ${field(t('ghToken'), input('token', '', 'type="password" required autocomplete="off"'), t('ghTokenHint'))}
+    ${field(t('ghTokenExpires'), input('tokenExpires', '', 'type="date"'), t('ghTokenExpiresHint'))}
+    <button class="btn block" type="submit">${esc(t('save'))}</button>
+  </form>`);
+}
+
+// One tap is enough to back up when the file is already prepared.
+function prepareBackup() {
+  if (prepared && prepared.count === commitCount) return;
+  const count = commitCount;
+  backupBlob(state, true).then((blob) => { if (count === commitCount) prepared = { blob, count }; }).catch(() => {});
+}
+
 // ---------------------------------------------------------------- after render (canvas etc.)
 
 function mountAfterRender(r) {
-  if (r.name === 'settings') mountSignaturePad();
+  if (r.name === 'settings') {
+    mountSignaturePad();
+    fillSnapshotList();
+    prepareBackup();
+  }
+  if (r.name === 'home' && needsBackup()) prepareBackup();
 }
 
 let sigDirty = false;
@@ -1528,10 +1851,11 @@ const actions = {
     if (!confirm(t('confirmDeletePayment'))) return;
     commit((s) => { s.payments = s.payments.filter((x) => x.id !== d.id); });
   },
-  deleteProperty: (d) => {
+  deleteProperty: async (d) => {
     const n = leasesFor(d.id).length;
     if (!confirm(n ? t('confirmDeletePropertyLeases', { n }) : t('confirmDeleteProperty'))) return;
     const leaseIds = new Set(leasesFor(d.id).map((l) => l.id));
+    await takeSnapshot('delete');
     commit((s) => {
       s.properties = s.properties.filter((x) => x.id !== d.id);
       s.leases = s.leases.filter((l) => !leaseIds.has(l.id));
@@ -1541,8 +1865,9 @@ const actions = {
     });
     location.hash = '#/properties';
   },
-  deleteLease: (d) => {
+  deleteLease: async (d) => {
     if (!confirm(t('confirmDeleteLease'))) return;
+    await takeSnapshot('delete');
     commit((s) => {
       s.leases = s.leases.filter((x) => x.id !== d.id);
       s.payments = s.payments.filter((x) => x.leaseId !== d.id);
@@ -1587,6 +1912,16 @@ const actions = {
     }
   },
   backup: async () => {
+    const name = `gestion-locative-sauvegarde-${today()}.json`;
+    if (prepared && prepared.count === commitCount) {
+      // Ready in advance: the share menu opens straight away.
+      const res = await shareFile(prepared.blob, name, 'application/json');
+      if (res !== 'cancelled') {
+        commit((s) => { s.settings.lastBackup = today(); });
+        toast(t('backupDone'));
+      }
+      return;
+    }
     const blob = await backupBlob(state, true);
     openSheet(t('backupTitle'), `<p>${esc(t('backupReady', { size: fmtSize(blob.size), n: state.documents.length }))}</p>
       <p class="hint">${esc(t('backupSaveHint'))}</p>
@@ -1613,11 +1948,13 @@ const actions = {
         const { state: next, files } = parseBackup(await file.text());
         const msg = t('confirmRestore', { p: next.properties.length, l: next.leases.length, pay: next.payments.length });
         if (!confirm(msg)) return;
+        await takeSnapshot('beforeRestore');
         await restoreFiles(files);
         state = next;
         setLang(state.settings.lang);
         applyTheme(state.settings.theme);
         await persist();
+        afterChange();
         location.hash = '#/';
         render();
         toast(t('restoreDone'));
@@ -1631,11 +1968,17 @@ const actions = {
     const word = state.settings.lang === 'fr' ? 'SUPPRIMER' : 'DELETE';
     const answer = prompt(t('wipeConfirm', { word }));
     if (answer !== word) return;
+    await takeSnapshot('wipe');
     const lang = state.settings.lang;
+    const theme = state.settings.theme;
+    // Documents go to the trash (kept 15 days) so the snapshot can still bring them back.
+    const trash = [...state.trash, ...state.documents.map((doc) => ({ id: doc.id, deletedOn: today() }))];
     state = emptyState();
     state.settings.lang = lang;
-    await clearFiles().catch(() => {});
+    state.settings.theme = theme;
+    state.trash = trash;
     await persist();
+    commitCount++;
     location.hash = '#/';
     render();
   },
@@ -1931,7 +2274,8 @@ Object.assign(actions, {
     inp.click();
   },
   importReset: () => { sessions.import = null; render(); },
-  importApply: () => {
+  importApply: async () => {
+    await takeSnapshot('import');
     const s = sessions.import;
     const add = [];
     for (const tx of s.txs) {
@@ -2222,6 +2566,82 @@ Object.assign(changes, {
   },
 });
 
+// ---------------------------------------------------------------- v1.2 handlers
+
+Object.assign(actions, {
+  snapRestore: (d) => { restoreSnapshot(d.id); },
+  syncNow: () => { clearTimeout(syncTimer); runSync(); },
+  ghRestore: () => { ghRestoreSheet(); },
+  ghRestoreVersion: (d) => { ghRestoreVersion(d.sha); },
+  ghToken: () => ghTokenSheet(),
+  ghDisconnect: async () => {
+    if (!confirm(t('confirmGhDisconnect'))) return;
+    clearTimeout(syncTimer);
+    secrets = {};
+    await saveSecrets(secrets);
+    render();
+  },
+});
+
+Object.assign(forms, {
+  ghConnect: async (f, form) => {
+    const repo = parseRepo(f.get('repo'));
+    const token = (f.get('token') || '').trim();
+    const passphrase = f.get('passphrase') || '';
+    if (!repo) { toast(t('ghRepoInvalid'), 'error'); return; }
+    if (passphrase.length < 8) { toast(t('ghPassShort'), 'error'); return; }
+    if (passphrase !== f.get('passphrase2')) { toast(t('ghPassMismatch'), 'error'); return; }
+    const btn = form.querySelector('button[type=submit]');
+    btn.disabled = true;
+    btn.textContent = t('ghConnecting');
+    const cfg = { repo, token };
+    let remote = null;
+    try {
+      await checkRepo(cfg);
+      remote = await getSha(cfg, DATA_PATH);
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = t('ghConnect');
+      toast(t('syncErr_' + ((e && e.code) || 'unknown')), 'error');
+      return;
+    }
+    secrets = { github: { repo, token, passphrase, tokenExpires: f.get('tokenExpires') || null }, sync: {} };
+    await saveSecrets(secrets);
+    render();
+    toast(t('ghConnected'));
+    if (remote && !hasData()) {
+      ghRestoreSheet(t('ghRemoteFound'));
+    } else if (remote) {
+      if (confirm(t('ghRemoteExistsReplace'))) {
+        syncMeta().dataSha = remote;
+        runSync();
+      } else {
+        ghRestoreSheet(t('ghRemoteFound'));
+      }
+    } else {
+      runSync();
+    }
+  },
+  ghToken: async (f) => {
+    const g = gh();
+    const token = (f.get('token') || '').trim();
+    try {
+      await checkRepo({ repo: g.repo, token });
+    } catch (e) {
+      toast(t('syncErr_' + ((e && e.code) || 'unknown')), 'error');
+      return;
+    }
+    g.token = token;
+    g.tokenExpires = f.get('tokenExpires') || null;
+    syncMeta().lastError = null;
+    await saveSecrets(secrets);
+    closeSheet();
+    render();
+    toast(t('ghTokenUpdated'));
+    scheduleSync(1000);
+  },
+});
+
 // ---------------------------------------------------------------- boot
 
 document.addEventListener('click', (e) => {
@@ -2322,9 +2742,20 @@ async function boot() {
     persist();
   }
   applyTheme(state.settings.theme);
+  try { secrets = await loadSecrets(); } catch (e) { secrets = {}; }
   render();
   askPersistentStorage();
   registerServiceWorker();
+  // Data safety: today's snapshot, old deleted files, pending GitHub backup.
+  dailySnapshot().then(cleanFiles);
+  if (gh()) {
+    const m = syncMeta();
+    if (m.dirty || !m.lastOk) scheduleSync(4000);
+  }
+  document.addEventListener('visibilitychange', () => {
+    // Leaving the app: send any pending change right away.
+    if (document.visibilityState === 'hidden' && gh() && syncMeta().dirty) { clearTimeout(syncTimer); runSync(); }
+  });
 }
 
 boot();

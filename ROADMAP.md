@@ -56,10 +56,24 @@ Code: [`66c21b7`](https://github.com/hmaltawil/gestion-locative/commit/66c21b7)
 - [x] Bank import: a clear message when no incoming payment looks like rent
 - [x] Bank import: Revolut-style files use the booked ("Completed") date and skip pending or declined lines
 
+### ✅ Milestone 3 · Version 1.2 · Data safety (5 Nov 2026)
+- [x] Automatic copies on the phone: one a day for 14 days, plus one before each bank import, restore, deletion or erase; restore any of them from Settings
+- [x] Deleted documents keep their file 15 days, so restoring a copy brings them back
+- [x] Automatic backup to a private GitHub repository, a few seconds after each change and when leaving the app
+  - encrypted on the phone (AES-256-GCM, key from your passphrase); GitHub only receives unreadable files
+  - photos and PDFs uploaded as separate files, once each
+  - public repositories refused; the token and passphrase never go into backups or copies
+  - an empty new phone never overwrites an existing backup; it offers to restore it instead
+  - "Restore from GitHub" lists every version, so you can pick the one to bring back
+- [x] Backup status in Settings, home warnings when the GitHub backup fails or the token is about to expire
+- [x] One-tap manual backup (the file is prepared in the background)
+
 ---
 
 ## Waiting on you
 
+- ⏳ **Set up the GitHub backup (5 minutes):** Settings › Automatic backup (GitHub) › "How to set it up". Write the passphrase on paper.
+- ⏳ **Optional, fewer permission prompts for Claude:** add `.claude/settings.json` to this repository yourself (Claude isn't allowed to change its own permissions).
 - ⏳ **Bank CSV sample** (account numbers removed) and the bank's name, to tune the import. This is milestone 4. It's exported from the bank's website, not the monthly PDF statement.
 - ✅ **First check on the real iPhone:** everything works (5 Nov 2026)
   - [x] Add to Home Screen, then open from the icon
@@ -75,14 +89,8 @@ Code: [`66c21b7`](https://github.com/hmaltawil/gestion-locative/commit/66c21b7)
 
 ## Next
 
-### 🔜 Milestone 3 · Version 1.2 · Data safety
-Data lives only on the phone, so protecting it comes first.
-- [ ] Automatic snapshots inside the app: one a day for 14 days, plus one before each import, restore or deletion; a screen to restore any of them
-- [ ] Automatic encrypted backup to a private GitHub repository after each change (passphrase plus an access token limited to that repository; every version kept)
-- [ ] Backup status in Settings: last snapshot, last off-device backup, any errors
-- [ ] One-tap manual backup, prepared in the background
-
-### Milestone 4 · Version 1.3 · Bank import and semi-automatic follow-up
+### 🔜 Milestone 4 · Version 1.3 · Bank import and semi-automatic follow-up
+Waiting for your bank's CSV sample.
 Goal: a monthly routine of about 5 minutes. Download the bank file, import it, then tap through receipts and reminders.
 - [ ] Adapt column and date detection to your bank's export (support OFX or Excel too, if your bank has no CSV)
 - [ ] Optionally import money going out as expenses, with a suggested category
@@ -124,7 +132,8 @@ Goal: a monthly routine of about 5 minutes. Download the bank file, import it, t
 
 ## Known limitations (current version)
 
-- Data is on one iPhone only, so backups matter (see milestone 3)
+- Data is used on one iPhone. With the GitHub backup on, it's also stored off the phone, but it's not a sync: if two phones were connected to the same repository, the last one to save would replace the other's data
+- If the GitHub passphrase is lost, the GitHub backups can't be read; the manual backup file isn't encrypted and still works
 - Not yet tested on a real iPhone (see [Waiting](#waiting-on-you))
 - The tax summary is a guide; check it against that year's form 2044 instructions
 - Diagnostic validity rules are simplified (older DPEs have special rules); expiry dates can be edited

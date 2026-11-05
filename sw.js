@@ -1,6 +1,6 @@
 // Offline support: keeps a copy of the app files on the phone.
 // Bump VERSION whenever a file changes so phones pick up the update.
-const VERSION = 'v1.1.2';
+const VERSION = 'v1.2.0';
 const CACHE = 'gestion-locative-' + VERSION;
 const FILES = [
   './',
@@ -18,6 +18,9 @@ const FILES = [
   './js/irl.js',
   './js/store.js',
   './js/util.js',
+  './js/crypto.js',
+  './js/sync.js',
+  './js/snapshots.js',
   './vendor/jspdf.umd.min.js',
   './icons/icon-192.png',
   './icons/icon-512.png',

@@ -1,11 +1,15 @@
 // Saves all the app's data on the device (IndexedDB), plus backup and restore.
-// 'kv' holds the app state as one JSON object; 'files' holds attached documents.
+// 'kv' holds the app state as one JSON object (and, under a separate key, the
+// off-site backup settings, which never go into backups or snapshots);
+// 'files' holds attached documents; 'snapshots' holds automatic copies.
 
 const DB_NAME = 'gestion-locative';
 const STORE = 'kv';
 const FILES = 'files';
+const SNAPS = 'snapshots';
 const KEY = 'state';
-export const DATA_VERSION = 2;
+const SECRETS_KEY = 'secrets';
+export const DATA_VERSION = 3;
 
 export function emptyState() {
   const lang = (globalThis.navigator && (navigator.language || 'fr').toLowerCase().startsWith('fr')) ? 'fr' : 'en';
@@ -26,19 +30,25 @@ export function emptyState() {
     expenses: [],
     reminders: [],
     documents: [],
+    trash: [], // deleted documents: files kept 15 days so a snapshot can bring them back
     sent: {},
   };
 }
 
 function openDb() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 2);
+    const req = indexedDB.open(DB_NAME, 3);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
       if (!db.objectStoreNames.contains(FILES)) db.createObjectStore(FILES);
+      if (!db.objectStoreNames.contains(SNAPS)) db.createObjectStore(SNAPS, { keyPath: 'id' });
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      // Let a newer version of the app upgrade the database if one is open.
+      req.result.onversionchange = () => req.result.close();
+      resolve(req.result);
+    };
     req.onerror = () => reject(req.error);
   });
 }
@@ -94,13 +104,41 @@ export async function clearFiles() {
   return tx(FILES, 'readwrite', (s) => s.clear());
 }
 
+// ---------- snapshots (automatic copies kept on the device) ----------
+// { id, at: ISO date-time, day: 'YYYY-MM-DD', reason, counts, state }
+export function putSnapshot(snap) {
+  return tx(SNAPS, 'readwrite', (s) => s.put(JSON.parse(JSON.stringify(snap))));
+}
+
+export async function listSnapshots() {
+  const all = (await tx(SNAPS, 'readonly', (s) => s.getAll())) || [];
+  return all.sort((a, b) => (a.at < b.at ? 1 : -1));
+}
+
+export function getSnapshot(id) {
+  return tx(SNAPS, 'readonly', (s) => s.get(id));
+}
+
+export function deleteSnapshot(id) {
+  return tx(SNAPS, 'readwrite', (s) => s.delete(id));
+}
+
+// ---------- off-site backup settings (never part of the app data) ----------
+export async function loadSecrets() {
+  return (await tx(STORE, 'readonly', (s) => s.get(SECRETS_KEY))) || {};
+}
+
+export function saveSecrets(secrets) {
+  return tx(STORE, 'readwrite', (s) => s.put(JSON.parse(JSON.stringify(secrets)), SECRETS_KEY));
+}
+
 // Fills in anything missing so older data and backups keep working.
 export function normalize(raw) {
   const base = emptyState();
   const s = { ...base, ...raw };
   s.settings = { ...base.settings, ...(raw.settings || {}) };
   s.settings.landlord = { ...base.settings.landlord, ...((raw.settings || {}).landlord || {}) };
-  for (const k of ['properties', 'leases', 'payments', 'expenses', 'reminders', 'documents']) if (!Array.isArray(s[k])) s[k] = [];
+  for (const k of ['properties', 'leases', 'payments', 'expenses', 'reminders', 'documents', 'trash']) if (!Array.isArray(s[k])) s[k] = [];
   if (!s.irl || typeof s.irl !== 'object') s.irl = {};
   if (!s.sent || typeof s.sent !== 'object') s.sent = {};
   for (const l of s.leases) {
@@ -159,8 +197,9 @@ export function parseBackup(text) {
   return { state: normalize(raw), files };
 }
 
+// Adds the backup's files. Files that are no longer used are cleaned up at
+// startup, so a snapshot taken before the restore keeps its documents.
 export async function restoreFiles(files) {
-  await clearFiles();
   for (const [id, f] of Object.entries(files)) {
     await putFile(id, { name: f.name, type: f.type, data: base64ToBuf(f.data) });
   }
