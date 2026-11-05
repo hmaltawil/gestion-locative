@@ -1,18 +1,25 @@
 import {
-  addMonths, esc, fmtDate, fmtMoney, fmtPeriod, fmtPeriodCap, moneyInput, parseMoney,
+  addMonths, addYears, esc, fmtDate, fmtMoney, fmtPeriod, fmtPeriodCap, moneyInput, parseMoney,
   periodOf, todayStr, uid, addDays,
 } from './util.js';
 import {
-  currentRent, dueForPeriod, dueDateFor, indexationStatus, isActive, ledger, monthOverview, sortedRents,
+  currentRent, dueForPeriod, dueDateFor, indexationStatus, isActive, ledger, monthOverview, rentAt, sortedRents,
 } from './calc.js';
 import { fetchInseeIrl, fmtIrlKey, irlKey, irlTable, latestIrlKey } from './irl.js';
-import { askPersistentStorage, backupBlob, emptyState, loadState, parseBackup, saveState } from './store.js';
 import {
-  deliver, formalNoticePdf, indexationPdf, receiptPdf, reminderPdf, rentCallPdf, shareFile,
+  askPersistentStorage, backupBlob, clearFiles, deleteFile, emptyState, getFile, loadState, parseBackup, putFile, restoreFiles, saveState,
+} from './store.js';
+import {
+  deliver, departurePdf, depositReceiptPdf, formalNoticePdf, guarantorPdf, indexationPdf, newPdf, receiptPdf, regularizationPdf,
+  reminderPdf, rentCallPdf, rentCertificatePdf, shareFile, taxSummaryPdf,
 } from './docs.js';
+import { guessMapping, knownLabels, parseCsv, suggestLease, toTransactions } from './bank.js';
+import { departureStatement, recoverableExpenses, regularization } from './charges.js';
+import { LINE_2044, taxSummary, yearCsv } from './tax.js';
+import { buildIcs, deadlines, defaultExpiry } from './deadlines.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.1.0';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -68,6 +75,11 @@ const ICONS = {
   doc: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/>',
   check: '<path d="M5 12.5 10 17 19 7"/>',
   chevron: '<path d="M9 5l7 7-7 7"/>',
+  stack: '<path d="M8 3h9l3 3v12H8z"/><path d="M5 6v15h11"/>',
+  bank: '<path d="M3 9.5 12 4l9 5.5"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  chart: '<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>',
+  clip: '<path d="M20 11.5 12.2 19.3a5 5 0 0 1-7-7L13 4.5a3.3 3.3 0 0 1 4.7 4.7l-7.8 7.8a1.7 1.7 0 0 1-2.4-2.4l7.1-7.1"/>',
 };
 
 function icon(name, cls = '') {
@@ -169,6 +181,7 @@ const TAB_OF = {
   home: 'home', properties: 'properties', property: 'properties', 'property-edit': 'properties',
   leases: 'leases', lease: 'leases', 'lease-new': 'leases', 'lease-edit': 'leases',
   expenses: 'expenses', 'expense-new': 'expenses', 'expense-edit': 'expenses', settings: 'settings',
+  batch: 'home', import: 'home', deadlines: 'home', tax: 'expenses', regularize: 'leases', departure: 'leases',
 };
 
 function tabbar(active) {
@@ -191,6 +204,12 @@ function render() {
     'expense-new': viewExpenseForm,
     'expense-edit': viewExpenseForm,
     settings: viewSettings,
+    batch: viewBatch,
+    import: viewImport,
+    deadlines: viewDeadlines,
+    tax: viewTax,
+    regularize: viewRegularize,
+    departure: viewDeparture,
   };
   const view = views[r.name] || viewHome;
   const scroll = root.dataset.route === location.hash ? window.scrollY : 0;
@@ -268,6 +287,8 @@ function viewHome() {
         <div class="tile"><span class="tile-label">${esc(t('receivedThisMonth'))}</span><span class="tile-value">${fmtMoney(ov.received)}</span></div>
         <div class="tile ${ov.overdue > 0 ? 'bad' : ''}"><span class="tile-label">${esc(t('overdueTotal'))}</span><span class="tile-value">${fmtMoney(ov.overdue)}</span></div>
       </div>
+      ${quickLinks()}
+      ${homeDeadlines()}
       ${revisions.length ? `<section class="card"><h3>${esc(t('revisionsDue'))}</h3><ul class="list plain">${revisions.map(({ l, info }) => `
         <li><a class="row-link" href="#/lease/${l.id}"><span><strong>${esc(tenantsLabel(l))}</strong><br><span class="muted">${esc(t('revisionLine', { from: fmtMoney(info.currentRent), to: fmtMoney(info.newRent), pct: info.pct.toFixed(2) }))}</span></span>${icon('chevron')}</a></li>`).join('')}</ul></section>` : ''}
       <section class="card flush">
@@ -322,6 +343,8 @@ function viewProperty(r) {
           <span><strong>${esc(tenantsLabel(l))}</strong><br><span class="muted">${esc(t('since', { date: fmtDate(l.startDate) }))}${l.endDate ? ' · ' + esc(t('until', { date: fmtDate(l.endDate) })) : ''}</span></span>
           <span class="row-end">${isActive(l, today()) ? pill('paid', t('active')) : pill('upcoming', t('ended'))}${icon('chevron')}</span></a></li>`).join('')}</ul>` : empty(t('noLeaseHere'))}
       </section>
+      ${diagnosticsSection(p)}
+      ${docsSection('property', p.id)}
       <button class="btn danger ghost" data-action="deleteProperty" data-id="${p.id}">${esc(t('deleteProperty'))}</button>`,
   });
 }
@@ -435,6 +458,9 @@ function viewLease(r) {
         <button class="action" data-action="receiptPicker" data-lease="${l.id}">${icon('receipt')}<span>${esc(t('receipt'))}</span></button>
         <button class="action" data-action="reminder" data-lease="${l.id}" ${led.overdue > 0 ? '' : 'disabled'}>${icon('doc')}<span>${esc(t('reminder'))}</span></button>
         <button class="action" data-action="notice" data-lease="${l.id}" ${led.overdue > 0 ? '' : 'disabled'}>${icon('doc')}<span>${esc(t('formalNotice'))}</span></button>
+        <button class="action" data-action="letters" data-lease="${l.id}">${icon('stack')}<span>${esc(t('otherLetters'))}</span></button>
+        ${l.chargesType !== 'forfait' ? `<a class="action" href="#/regularize/${l.id}">${icon('chart')}<span>${esc(t('regShort'))}</span></a>` : ''}
+        <a class="action" href="#/departure/${l.id}">${icon('key')}<span>${esc(t('departureShort'))}</span></a>
       </div>
       ${revision}
       <section class="card flush">
@@ -443,6 +469,7 @@ function viewLease(r) {
         ${shown.length ? `<ul class="list">${ledgerList}</ul>` : empty(t('noPeriodsYet'))}
         ${!showAll && rows.length > 12 ? `<a class="more" href="#/lease/${l.id}?all=1">${esc(t('showAll', { n: rows.length }))}</a>` : ''}
       </section>
+      ${adjustmentsSection(l, led)}
       <section class="card flush">
         <h3 class="pad">${esc(t('payments'))}</h3>
         ${payments.length ? `<ul class="list">${payments.map((x) => `<li class="row">
@@ -458,6 +485,7 @@ function viewLease(r) {
           <dt>${esc(t('chargesType'))}</dt><dd>${esc(t(l.chargesType === 'forfait' ? 'chargesForfait' : 'chargesProvision'))}</dd>
           ${l.deposit ? `<dt>${esc(t('deposit'))}</dt><dd>${fmtMoney(l.deposit)}</dd>` : ''}
           ${l.guarantor ? `<dt>${esc(t('guarantor'))}</dt><dd>${esc(l.guarantor)}</dd>` : ''}
+          <dt>${esc(t('insuranceUntil'))}</dt><dd>${l.insuranceUntil ? fmtDate(l.insuranceUntil) : `<button class="link" data-action="insuranceUpdate" data-lease="${l.id}">${esc(t('setDate'))}</button>`}</dd>
           <dt>${esc(t('irlRef'))}</dt><dd>${l.irl && l.irl.quarter ? esc(t('irlRefValue', { q: l.irl.quarter, key: fmtIrlKey(l.irl.key, lang), value: l.irl.value })) : esc(t('none'))}</dd>
           ${l.lastRevision ? `<dt>${esc(t('lastRevision'))}</dt><dd>${fmtDate(l.lastRevision)}</dd>` : ''}
           ${(l.tenants || []).map((x) => `<dt>${esc(t('tenant'))}</dt><dd>${esc(x.name)}${x.email ? `<br><a href="mailto:${esc(x.email)}">${esc(x.email)}</a>` : ''}${x.phone ? `<br><a href="tel:${esc(x.phone)}">${esc(x.phone)}</a>` : ''}</dd>`).join('')}
@@ -466,8 +494,8 @@ function viewLease(r) {
         <h4>${esc(t('rentHistory'))}</h4>
         <ul class="list plain compact">${sortedRents(l).reverse().map((x) => `<li><span>${esc(t('fromPeriod', { period: fmtPeriod(x.from, lang) }))}</span><span>${fmtMoney(x.rent)} + ${fmtMoney(x.charges)}${x.reason === 'indexation' ? ' · IRL' : ''}</span></li>`).join('')}</ul>
       </section>
+      ${docsSection('lease', l.id)}
       <div class="danger-zone">
-        ${isActive(l, td) ? `<button class="btn ghost" data-action="endLease" data-lease="${l.id}">${esc(t('endLease'))}</button>` : ''}
         <button class="btn danger ghost" data-action="deleteLease" data-id="${l.id}">${esc(t('deleteLease'))}</button>
       </div>`,
   });
@@ -509,6 +537,7 @@ function viewLeaseForm(r) {
         <div id="tenants">${(l.tenants && l.tenants.length ? l.tenants : [{}]).map((x, i) => tenantRow(i, x)).join('')}</div>
         <button type="button" class="link" data-action="addTenantRow">+ ${esc(t('addCoTenant'))}</button>
         ${field(t('guarantor'), input('guarantor', l.guarantor, `placeholder="${esc(t('guarantorPh'))}"`))}
+        ${field(t('insuranceUntil'), input('insuranceUntil', l.insuranceUntil, 'type="date"'), t('insuranceHint'))}
       </section>
       <section class="card">
         <h3>${esc(t('datesAndRent'))}</h3>
@@ -556,8 +585,12 @@ function viewLeaseForm(r) {
 
 // ---------------------------------------------------------------- expenses
 
-export const EXPENSE_CATEGORIES = ['management', 'insurance', 'works', 'propertyTax', 'condo', 'loanInterest', 'loanInsurance', 'recoverable', 'other'];
-export const LINE_2044 = { management: '221', insurance: '223', works: '224', propertyTax: '227', condo: '229', loanInterest: '250', loanInsurance: '250' };
+export const EXPENSE_CATEGORIES = ['management', 'insurance', 'works', 'propertyTax', 'teom', 'condo', 'loanInterest', 'loanInsurance', 'recoverable', 'other'];
+const LINE_LABELS_FR = {
+  221: "Frais d'administration et de gestion", 222: 'Autres frais de gestion (20 € par local)', 223: "Primes d'assurance",
+  224: "Dépenses de réparation, d'entretien et d'amélioration", 227: 'Taxes foncières (hors TEOM)',
+  229: 'Provisions pour charges de copropriété', 250: "Intérêts et frais d'emprunt",
+};
 
 function viewExpenses(r) {
   const td = today();
@@ -606,7 +639,8 @@ function viewExpenseForm(r) {
       ${field(t('property'), select('propertyId', [['', t('general')], ...state.properties.map((p) => [p.id, propName(p)])], e.propertyId || ''))}
       <button class="btn block" type="submit">${esc(t('save'))}</button>
       ${isNew ? '' : `<button type="button" class="btn danger ghost block" data-action="deleteExpense" data-id="${e.id}">${esc(t('delete'))}</button>`}
-    </form>`,
+    </form>
+    ${isNew ? `<p class="hint">${esc(t('attachAfterSave'))}</p>` : docsSection('expense', e.id)}`,
   });
 }
 
@@ -669,7 +703,7 @@ function viewSettings() {
           <button class="btn" data-action="backup">${esc(t('backupNow'))}</button>
           <button class="btn secondary" data-action="restore">${esc(t('restoreBtn'))}</button>
         </div>
-        <p class="hint">${esc(t('dataCounts', { p: state.properties.length, l: state.leases.length, pay: state.payments.length, e: state.expenses.length }))}</p>
+        <p class="hint">${esc(t('dataCounts', { p: state.properties.length, l: state.leases.length, pay: state.payments.length, e: state.expenses.length }))} · ${esc(t('docCount', { n: state.documents.length }))}</p>
       </section>
       <section class="card">
         <h3>${esc(t('about'))}</h3>
@@ -681,6 +715,631 @@ function viewSettings() {
 
 function notFound() {
   return page({ title: t('notFound'), back: '#/', body: empty(t('notFoundText'), `<a class="btn" href="#/">${esc(t('tabHome'))}</a>`) });
+}
+
+// ================================================================ v1.1 features
+// Screens that are not saved as they are edited keep their draft here.
+const sessions = { import: null, reg: {}, dep: {} };
+
+function quickLinks() {
+  return `<div class="quick">
+    <a class="quick-item" href="#/batch">${icon('stack')}<span>${esc(t('qBatch'))}</span></a>
+    <a class="quick-item" href="#/import">${icon('bank')}<span>${esc(t('qImport'))}</span></a>
+    <a class="quick-item" href="#/deadlines">${icon('calendar')}<span>${esc(t('qDeadlines'))}</span></a>
+    <a class="quick-item" href="#/tax">${icon('chart')}<span>${esc(t('qTax'))}</span></a>
+  </div>`;
+}
+
+// ---------- deadlines ----------
+function dlTitle(it) {
+  if (it.kind === 'custom') return it.title || t('reminder');
+  const params = { ...(it.params || {}) };
+  if (params.end) params.end = fmtDate(params.end);
+  if (params.type) params.type = t('diag_' + params.type);
+  return t(it.key, params);
+}
+
+function dlSub(it) {
+  return [it.who && it.who !== '—' ? it.who : '', it.where].filter(Boolean).join(' · ');
+}
+
+function dlRow(it) {
+  const cls = it.overdue ? 'bad' : it.soon ? 'warn' : 'muted';
+  const when = it.soft ? '' : `<span class="pill ${cls}">${fmtDate(it.date)}</span>`;
+  let acts = '';
+  if (it.kind === 'insurance') acts = `<button class="btn small secondary" data-action="insuranceUpdate" data-lease="${it.leaseId}">${esc(t('update'))}</button>`;
+  if (it.kind === 'custom') acts = `<button class="btn small secondary" data-action="reminderDone" data-id="${it.reminderId}">${esc(t('done'))}</button>`;
+  return `<li class="row">
+    <a class="row-main" href="${it.href}"><strong class="wrap">${esc(dlTitle(it))}</strong><span class="muted">${esc(dlSub(it))}</span></a>
+    <div class="row-side">${when}</div>${acts}
+  </li>`;
+}
+
+function homeDeadlines() {
+  const items = deadlines(state, today())
+    .filter((i) => !i.soft && (i.overdue || i.soon) && i.key !== 'dl_revisionDue')
+    .slice(0, 5);
+  if (!items.length) return '';
+  return `<section class="card flush"><div class="card-head pad"><h3>${esc(t('upcomingDeadlines'))}</h3><a class="small" href="#/deadlines">${esc(t('seeAll'))}</a></div>
+    <ul class="list">${items.map(dlRow).join('')}</ul></section>`;
+}
+
+function viewDeadlines() {
+  const items = deadlines(state, today());
+  const groups = [
+    ['dlOverdue', items.filter((i) => i.overdue && !i.soft)],
+    ['dlSoon', items.filter((i) => i.soon && !i.soft)],
+    ['dlLater', items.filter((i) => !i.overdue && !i.soon && !i.soft)],
+    ['dlSetup', items.filter((i) => i.soft)],
+  ];
+  const custom = (state.reminders || []).filter((r) => !r.done);
+  return page({
+    title: t('qDeadlines'),
+    back: '#/',
+    body: `
+      <div class="btn-row spaced">
+        <button class="btn secondary" data-action="addReminder">${icon('plus')} ${esc(t('addReminder'))}</button>
+        <button class="btn secondary" data-action="exportIcs">${icon('calendar')} ${esc(t('addToCalendar'))}</button>
+      </div>
+      <p class="hint">${esc(t('icsHint'))}</p>
+      ${groups.filter(([, list]) => list.length).map(([k, list]) => `<section class="card flush"><h3 class="pad">${esc(t(k))}</h3><ul class="list">${list.map(dlRow).join('')}</ul></section>`).join('') || empty(t('noDeadlines'))}
+      ${custom.length ? `<section class="card flush"><h3 class="pad">${esc(t('myReminders'))}</h3><ul class="list">${custom.map((r) => `<li class="row">
+        <div class="row-main"><strong>${esc(r.title)}</strong><span class="muted">${fmtDate(r.date)}${r.repeat === 'yearly' ? ' · ' + esc(t('everyYear')) : ''}</span></div>
+        <button class="link danger" data-action="reminderDelete" data-id="${r.id}">${esc(t('delete'))}</button></li>`).join('')}</ul></section>` : ''}`,
+  });
+}
+
+function nextOccurrence(mmdd) {
+  const td = today();
+  let d = `${td.slice(0, 4)}-${mmdd}`;
+  if (d < td) d = addYears(d, 1);
+  return d;
+}
+
+function reminderSheet() {
+  const presets = [
+    [t('presetPropertyTax'), nextOccurrence('10-15')],
+    [t('presetTaxReturn'), nextOccurrence('05-20')],
+    [t('presetInsurance'), ''],
+  ];
+  openSheet(t('addReminder'), `<form class="form" data-form="reminder">
+    <div class="chips">${presets.map(([title, date]) => `<button type="button" class="chip" data-action="fillReminder" data-title="${esc(title)}" data-date="${date}">${esc(title)}</button>`).join('')}</div>
+    ${field(t('title'), input('title', '', 'required'))}
+    ${field(t('date'), input('date', '', 'type="date" required'))}
+    ${field(t('property'), select('propertyId', [['', t('general')], ...state.properties.map((p) => [p.id, propName(p)])], ''))}
+    <label class="check"><input type="checkbox" name="yearly" checked> ${esc(t('everyYear'))}</label>
+    <button class="btn block" type="submit">${esc(t('save'))}</button>
+  </form>`);
+}
+
+function insuranceSheet(leaseId) {
+  const l = leaseOf(leaseId);
+  const base = l.insuranceUntil && l.insuranceUntil > today() ? l.insuranceUntil : today();
+  openSheet(t('insuranceTitle'), `<form class="form" data-form="insurance" data-lease="${l.id}">
+    <p class="muted">${esc(tenantsLabel(l))}</p>
+    <p class="hint">${esc(t('insuranceHint'))}</p>
+    ${field(t('insuranceUntil'), input('until', addYears(base, l.insuranceUntil ? 1 : 0), 'type="date" required'))}
+    <button class="btn block" type="submit">${esc(t('save'))}</button>
+  </form>`);
+}
+
+// ---------- monthly batch ----------
+function rentCallData(l, period, withBalance = true) {
+  const due = { ...dueForPeriod(l, period), dueDate: dueDateFor(l, period) };
+  let previous = 0;
+  if (withBalance) {
+    const led = ledger(l, state.payments, today());
+    for (const d of led.debts) {
+      const before = d.kind === 'period' ? d.period < period : d.dueDate < `${period}-01`;
+      if (before) previous += d.total - d.paid;
+    }
+    previous -= led.credit;
+  }
+  return { due, previous: Math.max(0, previous) };
+}
+
+function batchDoc(type, l, period, into) {
+  if (type === 'rentCall') {
+    const { due, previous } = rentCallData(l, period);
+    return rentCallPdf(state, l, due, previous, into);
+  }
+  const row = ledger(l, state.payments, today()).rows.find((x) => x.period === period);
+  return row && row.paid > 0 ? receiptPdf(state, l, row, into) : null;
+}
+
+function leasesInPeriod(period) {
+  return state.leases
+    .filter((l) => periodOf(l.startDate) <= period && (!l.endDate || periodOf(l.endDate) >= period))
+    .sort((a, b) => propName(prop(a.propertyId)).localeCompare(propName(prop(b.propertyId))));
+}
+
+function viewBatch(r) {
+  const td = today();
+  const cur = periodOf(td);
+  const type = r.query.get('type') === 'rentCall' ? 'rentCall' : 'receipt';
+  const def = type === 'receipt' ? cur : (Number(td.slice(8)) >= 15 ? addMonths(cur, 1) : cur);
+  const period = r.query.get('period') || def;
+  const options = [-3, -2, -1, 0, 1].map((n) => addMonths(cur, n));
+  if (!options.includes(period)) options.push(period);
+  const lang = state.settings.lang;
+  const list = leasesInPeriod(period);
+  let ready = 0;
+  const rows = list.map((l) => {
+    const key = `${type}:${l.id}:${period}`;
+    const sent = state.sent[key];
+    let status = '';
+    let btn = '';
+    if (type === 'receipt') {
+      const row = ledger(l, state.payments, td).rows.find((x) => x.period === period);
+      if (!row) status = pill('upcoming', t('notTracked'));
+      else if (row.paid >= row.total && row.total > 0) { status = pill('paid'); btn = 'send'; ready++; }
+      else if (row.paid > 0) { status = pill('partial'); btn = 'partial'; }
+      else status = pill(row.late ? 'late' : 'unpaid', row.late ? t('status_late') : undefined);
+    } else { btn = 'send'; ready++; }
+    const email = (l.tenants || []).map((x) => x.email).filter(Boolean)[0];
+    return `<li class="row">
+      <div class="row-main"><strong>${esc(tenantsLabel(l))}</strong><span class="muted">${esc(propName(prop(l.propertyId)))}${email ? '' : ' · ' + esc(t('noEmailShort'))}</span>
+      ${sent ? `<span class="ok-text small">${icon('check', 'tiny')} ${esc(t('sentOn', { date: fmtDate(sent) }))}</span>` : ''}</div>
+      <div class="row-side">${status}</div>
+      ${btn ? `<button class="btn small${sent ? ' secondary' : ''}" data-action="batchSend" data-type="${type}" data-lease="${l.id}" data-period="${period}">${esc(btn === 'partial' ? t('partialShort') : t('send'))}</button>` : '<span class="icon-btn-space"></span>'}
+    </li>`;
+  }).join('');
+  return page({
+    title: t('qBatch'),
+    back: '#/',
+    body: `
+      <div class="segmented">
+        <a href="#/batch?type=receipt&period=${period}" class="${type === 'receipt' ? 'active' : ''}">${esc(t('receipts'))}</a>
+        <a href="#/batch?type=rentCall&period=${addMonths(cur, Number(td.slice(8)) >= 15 ? 1 : 0)}" class="${type === 'rentCall' ? 'active' : ''}">${esc(t('rentCalls'))}</a>
+      </div>
+      <div class="filters one">${select('period', options.sort().map((p) => [p, fmtPeriodCap(p, lang)]), period, `data-change="batchPeriod" data-type="${type}"`)}</div>
+      <p class="hint">${esc(t('batchHint'))}</p>
+      <section class="card flush">${list.length ? `<ul class="list">${rows}</ul>` : empty(t('noActiveLeases'))}</section>
+      ${ready ? `<button class="btn block secondary" data-action="batchAll" data-type="${type}" data-period="${period}">${icon('doc')} ${esc(t('allInOne', { n: ready }))}</button>` : ''}`,
+  });
+}
+
+// ---------- bank import ----------
+async function readText(file) {
+  const buf = await file.arrayBuffer();
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buf);
+  } catch (e) {
+    return new TextDecoder('windows-1252').decode(buf);
+  }
+}
+
+function importCandidates() {
+  const td = today();
+  return state.leases
+    .filter((l) => isActive(l, addDays(td, -120)))
+    .map((l) => {
+      const cur = currentRent(l, td);
+      return { lease: l, monthTotal: cur.rent + cur.charges, owed: ledger(l, state.payments, td).owed };
+    });
+}
+
+function rebuildImport() {
+  const s = sessions.import;
+  s.txs = toTransactions(s.rows, s.map);
+  const known = knownLabels(state.payments);
+  const cands = importCandidates();
+  const done = new Set(state.payments.map((p) => p.bankRef).filter(Boolean));
+  for (const tx of s.txs) {
+    if (tx.amount <= 0 || s.choices[tx.fp]) continue;
+    const dup = done.has(tx.fp);
+    const sug = suggestLease(tx, cands, known);
+    s.choices[tx.fp] = { leaseId: sug.leaseId, on: !dup && sug.score >= 50, dup, score: sug.score };
+  }
+}
+
+function viewImport() {
+  const s = sessions.import;
+  if (!s) {
+    return page({
+      title: t('qImport'),
+      back: '#/',
+      body: `<section class="card">
+        <h3>${esc(t('importTitle'))}</h3>
+        <p>${esc(t('importIntro'))}</p>
+        <p class="hint">${esc(t('importPrivacy'))}</p>
+        <button class="btn block" data-action="importPick">${esc(t('chooseCsv'))}</button>
+      </section>`,
+    });
+  }
+  const header = s.map.headerRow >= 0 ? s.rows[s.map.headerRow] : (s.rows[0] || []).map((_, i) => `${t('column')} ${i + 1}`);
+  const colOpts = [['-1', '—'], ...header.map((h, i) => [String(i), `${i + 1}. ${h || t('column') + ' ' + (i + 1)}`.slice(0, 40)])];
+  const credits = s.txs.filter((x) => x.amount > 0);
+  const debits = s.txs.length - credits.length;
+  const leaseOpts = [['', t('ignore')], ...state.leases.map((l) => [l.id, `${tenantsLabel(l)} · ${propName(prop(l.propertyId))}`])];
+  let nOn = 0;
+  let sum = 0;
+  const rows = credits.map((tx) => {
+    const c = s.choices[tx.fp] || {};
+    if (c.on && c.leaseId && !c.dup) { nOn++; sum += tx.amount; }
+    return `<li class="imp-row${c.dup ? ' dup' : ''}">
+      <label class="imp-check"><input type="checkbox" data-change="impToggle" data-fp="${esc(tx.fp)}" ${c.on && !c.dup ? 'checked' : ''} ${c.dup ? 'disabled' : ''}></label>
+      <div class="imp-main">
+        <div class="imp-top"><strong>${fmtMoney(tx.amount)}</strong><span class="muted small">${fmtDate(tx.date)}</span></div>
+        <div class="muted small imp-label">${esc(tx.label)}</div>
+        ${c.dup ? `<span class="pill muted">${esc(t('alreadyImported'))}</span>` : select('lease', leaseOpts, c.leaseId || '', `data-change="impLease" data-fp="${esc(tx.fp)}"`)}
+      </div>
+    </li>`;
+  }).join('');
+  return page({
+    title: t('qImport'),
+    back: '#/',
+    body: `
+      <section class="card">
+        <div class="card-head"><h3>${esc(s.fileName)}</h3><button class="link" data-action="importReset">${esc(t('otherFile'))}</button></div>
+        <p class="hint">${esc(t('importFound', { n: s.txs.length, c: credits.length, d: debits }))}</p>
+        <details ${s.txs.length ? '' : 'open'}><summary>${esc(t('columns'))}</summary>
+          <div class="grid2">
+            ${field(t('colDate'), select('date', colOpts, s.map.date, 'data-change="impMap" data-k="date"'))}
+            ${field(t('colLabel'), select('label', colOpts, s.map.label, 'data-change="impMap" data-k="label"'))}
+            ${field(t('colAmount'), select('amount', colOpts, s.map.amount, 'data-change="impMap" data-k="amount"'))}
+            ${field(t('colCredit'), select('credit', colOpts, s.map.credit, 'data-change="impMap" data-k="credit"'))}
+            ${field(t('colDebit'), select('debit', colOpts, s.map.debit, 'data-change="impMap" data-k="debit"'))}
+            ${field(t('headerRow'), select('headerRow', [['-1', t('none')], ...s.rows.slice(0, 15).map((row, i) => [String(i), `${i + 1}. ${row.join(' | ')}`.slice(0, 40)])], s.map.headerRow, 'data-change="impMap" data-k="headerRow"'))}
+          </div>
+        </details>
+      </section>
+      ${credits.length ? `<p class="hint">${esc(t('importMatchHint'))}</p><section class="card flush"><ul class="list imp-list">${rows}</ul></section>` : empty(t('importNothing'))}
+      ${nOn ? `<div class="sticky-cta"><button class="btn block" data-action="importApply">${esc(t('importApply', { n: nOn, amount: fmtMoney(sum) }))}</button></div>` : ''}`,
+  });
+}
+
+// ---------- charges reconciliation ----------
+function firstDueAfter(l, date) {
+  let p = periodOf(date);
+  if (dueDateFor(l, p) < date) p = addMonths(p, 1);
+  return dueDateFor(l, p);
+}
+
+function viewRegularize(r) {
+  const l = leaseOf(r.id);
+  if (!l) return notFound();
+  const td = today();
+  const year = Number(r.query.get('year') || Number(td.slice(0, 4)) - 1);
+  const key = `${l.id}:${year}`;
+  if (!sessions.reg[key]) {
+    sessions.reg[key] = {
+      lines: recoverableExpenses(state, l.propertyId, year).map((x) => ({ label: x.label, amount: x.amount })),
+      dueDate: firstDueAfter(l, addDays(td, 30)),
+      updateProvision: isActive(l, td),
+    };
+  }
+  const ses = sessions.reg[key];
+  const reg = regularization(l, year, ses.lines);
+  if (ses.newMonthly === undefined) ses.newMonthly = reg.suggestedMonthly;
+  const done = l.regularizations && l.regularizations[year];
+  const years = [];
+  for (let y = Number(td.slice(0, 4)); y >= Number(l.startDate.slice(0, 4)); y--) years.push([y, y]);
+  const cur = currentRent(l, td);
+  let balance;
+  if (reg.balance > 0) balance = `<div class="balance bad"><span>${esc(t('tenantOwes'))}</span><strong>${fmtMoney(reg.balance)}</strong></div>`;
+  else if (reg.balance < 0) balance = `<div class="balance ok"><span>${esc(t('refundTenant'))}</span><strong>${fmtMoney(-reg.balance)}</strong></div>`;
+  else balance = `<div class="balance"><span>${esc(t('balanced'))}</span><strong>${fmtMoney(0)}</strong></div>`;
+  return page({
+    title: t('regTitle'),
+    back: `#/lease/${l.id}`,
+    body: `
+      <p class="subtitle">${esc(tenantsLabel(l))} · ${esc(propName(prop(l.propertyId)))}</p>
+      ${l.chargesType === 'forfait' ? `<p class="note warn">${esc(t('regForfait'))}</p>` : ''}
+      ${done ? `<div class="note ok">${esc(t('regDone', { date: fmtDate(done.date), amount: fmtMoney(done.balance) }))} <button class="link danger" data-action="regUndo" data-lease="${l.id}" data-year="${year}">${esc(t('undo'))}</button></div>` : ''}
+      <div class="filters one">${select('year', years, year, `data-change="regYear" data-lease="${l.id}"`)}</div>
+      <section class="card">
+        <div class="card-head"><h3>${esc(t('actualCharges', { year }))}</h3><button class="link" data-action="regReload" data-key="${key}">${esc(t('reloadExpenses'))}</button></div>
+        <p class="hint">${esc(t('regLinesHint'))}</p>
+        ${ses.lines.map((x, i) => `<div class="line-edit">
+          <input value="${esc(x.label)}" placeholder="${esc(t('label'))}" data-change="regLine" data-key="${key}" data-i="${i}" data-f="label">
+          <div class="money-input"><input inputmode="decimal" value="${esc(moneyInput(x.amount))}" data-change="regLine" data-key="${key}" data-i="${i}" data-f="amount"><span>€</span></div>
+          <button class="icon-btn danger-text" data-action="regLineDel" data-key="${key}" data-i="${i}" aria-label="${esc(t('delete'))}">×</button>
+        </div>`).join('')}
+        <button class="link" data-action="regLineAdd" data-key="${key}">+ ${esc(t('addLine'))}</button>
+      </section>
+      <section class="card">
+        <dl class="facts">
+          <dt>${esc(t('totalActual'))}</dt><dd>${fmtMoney(reg.actualTotal)}</dd>
+          ${reg.share < 1 ? `<dt>${esc(t('occupancy'))}</dt><dd>${esc(t('daysOf', { d: reg.days, n: reg.yearDays }))}</dd><dt>${esc(t('tenantShare'))}</dt><dd>${fmtMoney(reg.tenantShare)}</dd>` : ''}
+          <dt>${esc(t('provisionsBilled'))}</dt><dd>${fmtMoney(reg.provisions)}</dd>
+        </dl>
+        <div class="spacer"></div>
+        ${balance}
+      </section>
+      <form class="card form" data-form="regApply" data-lease="${l.id}" data-year="${year}" data-key="${key}">
+        ${reg.balance !== 0 ? field(reg.balance > 0 ? t('payBy') : t('creditOn'), input('dueDate', ses.dueDate, `type="date" required data-change="regOpt" data-key="${key}" data-f="dueDate"`)) : ''}
+        ${isActive(l, td) ? `<label class="check"><input type="checkbox" name="updateProvision" ${ses.updateProvision ? 'checked' : ''} data-change="regOpt" data-key="${key}" data-f="updateProvision"> ${esc(t('updateProvision', { cur: fmtMoney(cur.charges) }))}</label>
+        ${ses.updateProvision ? `<div class="grid2">${moneyField(t('newMonthlyCharges'), 'newMonthly', ses.newMonthly, '', `data-change="regOpt" data-key="${key}" data-f="newMonthly"`)}${field(t('fromMonth'), input('newFrom', ses.newFrom || periodOf(ses.dueDate), `type="month" data-change="regOpt" data-key="${key}" data-f="newFrom"`))}</div>` : ''}` : ''}
+        <div class="btn-row">
+          <button type="button" class="btn secondary" data-action="regLetter" data-lease="${l.id}" data-year="${year}" data-key="${key}">${icon('doc')} ${esc(t('letterPdf'))}</button>
+          <button type="submit" class="btn" ${done ? 'disabled' : ''}>${esc(t('regApply'))}</button>
+        </div>
+        <p class="hint">${esc(t('regLegal'))}</p>
+      </form>`,
+  });
+}
+
+// ---------- departure ----------
+function departureSession(l) {
+  if (!sessions.dep[l.id]) {
+    const dep = l.departure || {};
+    sessions.dep[l.id] = {
+      keysDate: dep.keysDate || l.endDate || today(),
+      inventoryMatches: dep.inventoryMatches !== false,
+      deductions: (dep.deductions || []).map((x) => ({ ...x })),
+      retention: dep.retention || 0,
+      newAddress: dep.newAddress || '',
+    };
+  }
+  return sessions.dep[l.id];
+}
+
+function departureData(l) {
+  const ses = departureSession(l);
+  const tmp = { ...l, endDate: ses.keysDate };
+  const led = ledger(tmp, state.payments, today());
+  // Once the deposit is returned the ledger already includes the deductions,
+  // so show the statement as it was at that moment.
+  if (l.departure && l.departure.returnedOn && l.departure.statement) return { ses, tmp, led, st: l.departure.statement };
+  const st = departureStatement(tmp, led, { ...ses, returnedOn: l.departure && l.departure.returnedOn }, today());
+  return { ses, tmp, led, st };
+}
+
+function viewDeparture(r) {
+  const l = leaseOf(r.id);
+  if (!l) return notFound();
+  const td = today();
+  const { ses, st } = departureData(l);
+  const dep = l.departure || {};
+  const saved = l.endDate && l.endDate === ses.keysDate && dep.keysDate;
+  const returned = dep.returnedOn;
+  return page({
+    title: t('departureTitle'),
+    back: `#/lease/${l.id}`,
+    body: `
+      <p class="subtitle">${esc(tenantsLabel(l))} · ${esc(propName(prop(l.propertyId)))}</p>
+      ${returned ? `<div class="note ok">${esc(t('depositReturnedOn', { date: fmtDate(returned), amount: fmtMoney(dep.returnedAmount || 0) }))}</div>` : ''}
+      <fieldset class="card form" ${returned ? 'disabled' : ''}>
+        <h3>${esc(t('moveOut'))}</h3>
+        ${field(t('keysDate'), input('keysDate', ses.keysDate, `type="date" data-change="depField" data-lease="${l.id}" data-f="keysDate"`), t('keysDateHint'))}
+        <label class="check"><input type="checkbox" ${ses.inventoryMatches ? 'checked' : ''} data-change="depField" data-lease="${l.id}" data-f="inventoryMatches"> ${esc(t('inventoryMatches'))}</label>
+        ${field(t('newAddress'), input('newAddress', ses.newAddress, `data-change="depField" data-lease="${l.id}" data-f="newAddress"`))}
+        ${saved ? '' : `<button class="btn block" data-action="depSave" data-lease="${l.id}">${esc(t('endLeaseOn', { date: fmtDate(ses.keysDate) }))}</button>`}
+      </fieldset>
+      <fieldset class="card" ${returned ? 'disabled' : ''}>
+        <h3>${esc(t('deductions'))}</h3>
+        <p class="hint">${esc(t('deductionsHint'))}</p>
+        ${ses.deductions.map((x, i) => `<div class="line-edit">
+          <input value="${esc(x.label)}" placeholder="${esc(t('label'))}" data-change="depDed" data-lease="${l.id}" data-i="${i}" data-f="label">
+          <div class="money-input"><input inputmode="decimal" value="${esc(moneyInput(x.amount))}" data-change="depDed" data-lease="${l.id}" data-i="${i}" data-f="amount"><span>€</span></div>
+          <button class="icon-btn danger-text" data-action="depDedDel" data-lease="${l.id}" data-i="${i}" aria-label="${esc(t('delete'))}">×</button>
+        </div>`).join('')}
+        <button class="link" data-action="depDedAdd" data-lease="${l.id}">+ ${esc(t('addDeduction'))}</button>
+        <div class="spacer"></div>
+        ${moneyField(t('retention'), 'retention', ses.retention, t('retentionHint', { max: fmtMoney(st.maxRetention) }), `data-change="depField" data-lease="${l.id}" data-f="retention"`)}
+      </fieldset>
+      <section class="card">
+        <h3>${esc(t('statement'))}</h3>
+        <dl class="facts">
+          <dt>${esc(t('deposit'))}</dt><dd>${fmtMoney(st.deposit)}</dd>
+          ${st.credit ? `<dt>${esc(t('credit'))}</dt><dd>+ ${fmtMoney(st.credit)}</dd>` : ''}
+          <dt>${esc(t('arrears'))}</dt><dd>- ${fmtMoney(st.arrears)}</dd>
+          <dt>${esc(t('deductions'))}</dt><dd>- ${fmtMoney(st.deductions)}</dd>
+          ${st.retention ? `<dt>${esc(t('retentionShort'))}</dt><dd>- ${fmtMoney(st.retention)}</dd>` : ''}
+        </dl>
+        <div class="spacer"></div>
+        ${st.stillOwed > 0 ? `<div class="balance bad"><span>${esc(t('tenantStillOwes'))}</span><strong>${fmtMoney(st.stillOwed)}</strong></div>` : `<div class="balance ok"><span>${esc(t('toReturn'))}</span><strong>${fmtMoney(st.toReturn)}</strong></div>`}
+        <p class="${!returned && td > st.deadline ? 'note warn' : 'hint'}">${esc(t('depositDeadline', { date: fmtDate(st.deadline), months: ses.inventoryMatches ? 1 : 2 }))}${!returned && st.lateMonths ? ' ' + esc(t('latePenalty', { n: st.lateMonths, amount: fmtMoney(st.penalty) })) : ''}</p>
+        ${ses.keysDate > td ? `<p class="hint">${esc(t('futureDepartureHint'))}</p>` : ''}
+        <div class="btn-row">
+          <button class="btn secondary" data-action="depPdf" data-lease="${l.id}">${icon('doc')} ${esc(t('statementPdf'))}</button>
+          ${saved && !returned ? `<button class="btn" data-action="depReturned" data-lease="${l.id}">${esc(t('markReturned'))}</button>` : ''}
+        </div>
+      </section>`,
+  });
+}
+
+function depReturnedSheet(leaseId) {
+  const l = leaseOf(leaseId);
+  const { st } = departureData(l);
+  openSheet(t('markReturned'), `<form class="form" data-form="depReturned" data-lease="${l.id}">
+    <p class="hint">${esc(t('markReturnedHint'))}</p>
+    <div class="grid2">
+      ${field(t('date'), input('date', today(), 'type="date" required'))}
+      ${moneyField(t('amountReturned'), 'amount', st.toReturn)}
+    </div>
+    <button class="btn block" type="submit">${esc(t('save'))}</button>
+  </form>`);
+}
+
+// ---------- tax summary ----------
+function viewTax(r) {
+  const td = today();
+  const defYear = Number(td.slice(5, 7)) <= 6 ? Number(td.slice(0, 4)) - 1 : Number(td.slice(0, 4));
+  const year = Number(r.query.get('year') || defYear);
+  const years = new Set([Number(td.slice(0, 4)), Number(td.slice(0, 4)) - 1]);
+  for (const p of state.payments) years.add(Number(p.date.slice(0, 4)));
+  for (const e of state.expenses) years.add(Number(e.date.slice(0, 4)));
+  const s = taxSummary(state, year, td);
+  const L = (k) => t('l' + k);
+  const lineRow = (k, strong) => (s.lines[k] ? `<li><span>${strong ? '<strong>' : ''}${k} · ${esc(L(k))}${strong ? '</strong>' : ''}</span><span>${strong ? '<strong>' : ''}${fmtMoney(s.lines[k])}${strong ? '</strong>' : ''}</span></li>` : '');
+  return page({
+    title: t('qTax'),
+    back: '#/',
+    body: `
+      <div class="filters one">${select('year', [...years].sort().reverse().map((y) => [y, y]), year, 'data-change="taxYear"')}</div>
+      <section class="card">
+        <h3>${esc(t('taxTitle', { year }))}</h3>
+        <ul class="list plain compact">
+          ${lineRow('211', true)}
+          ${['221', '222', '223', '224', '227', '229'].map((k) => lineRow(k)).join('')}
+          <li><span><strong>240 · ${esc(L('240'))}</strong></span><span><strong>${fmtMoney(s.expenses)}</strong></span></li>
+          ${lineRow('250')}
+          <li class="total"><span><strong>${esc(s.result >= 0 ? t('resultProfit') : t('resultDeficit'))}</strong></span><span><strong>${fmtMoney(s.result)}</strong></span></li>
+        </ul>
+        <p class="note">${esc(s.microEligible ? t('microYes', { amount: fmtMoney(s.microTaxable) }) : t('microNo'))}</p>
+        ${s.notDeductible ? `<p class="hint">${esc(t('notDeductible', { amount: fmtMoney(s.notDeductible) }))}</p>` : ''}
+        <p class="hint">${esc(t('taxHint'))}</p>
+      </section>
+      <section class="card flush"><h3 class="pad">${esc(t('byProperty'))}</h3><ul class="list">${s.properties.map((p) => `<li class="row">
+        <div class="row-main"><strong>${esc(propName(p.property))}</strong><span class="muted small">${esc(t('chargesReceived', { amount: fmtMoney(p.charges) }))}</span></div>
+        <span class="amount">${fmtMoney(p.rent)}</span></li>`).join('')}</ul></section>
+      <div class="btn-row">
+        <button class="btn" data-action="taxPdf" data-year="${year}">${icon('doc')} ${esc(t('summaryPdf'))}</button>
+        <button class="btn secondary" data-action="taxCsv" data-year="${year}">${esc(t('exportCsv'))}</button>
+      </div>`,
+  });
+}
+
+// ---------- attached documents ----------
+const DOC_CATEGORIES = ['lease', 'inventory', 'diagnostic', 'insurance', 'identity', 'invoice', 'photo', 'other'];
+
+function fmtSize(n) {
+  if (n > 1e6) return (n / 1e6).toFixed(1).replace('.', ',') + ' Mo';
+  return Math.max(1, Math.round(n / 1e3)) + ' ko';
+}
+
+function docsSection(ownerType, ownerId) {
+  const list = state.documents.filter((d) => d.ownerType === ownerType && d.ownerId === ownerId)
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  return `<section class="card flush">
+    <div class="card-head pad"><h3>${esc(t('documents'))}</h3><button class="btn small secondary" data-action="docAdd" data-type="${ownerType}" data-owner="${ownerId}">${icon('clip')} ${esc(t('add'))}</button></div>
+    ${list.length ? `<ul class="list">${list.map((d) => `<li class="row">
+      <button class="row-main as-link" data-action="docOpen" data-id="${d.id}"><strong>${esc(d.name)}</strong><span class="muted small">${esc(t('doccat_' + d.category))} · ${fmtDate(d.date)} · ${fmtSize(d.size)}</span></button>
+      <button class="link danger" data-action="docDelete" data-id="${d.id}">${esc(t('delete'))}</button></li>`).join('')}</ul>` : `<p class="pad muted small pb">${esc(t('noDocuments'))}</p>`}
+  </section>`;
+}
+
+function docAddSheet(ownerType, ownerId) {
+  const def = ownerType === 'expense' ? 'invoice' : ownerType === 'lease' ? 'lease' : 'diagnostic';
+  openSheet(t('addDocument'), `<form class="form" data-form="docAdd" data-type="${ownerType}" data-owner="${ownerId}">
+    ${field(t('category'), select('category', DOC_CATEGORIES.map((c) => [c, t('doccat_' + c)]), def))}
+    ${field(t('files'), '<input type="file" name="files" multiple accept="image/*,application/pdf" required>')}
+    <p class="hint">${esc(t('docHint'))}</p>
+    <button class="btn block" type="submit">${esc(t('save'))}</button>
+  </form>`);
+}
+
+// Photos are resized so 15 properties' worth of documents stays small.
+async function compressImage(file) {
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 1800 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * scale);
+    c.height = Math.round(bmp.height * scale);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.82));
+    if (blob && blob.size < file.size) return { blob, type: 'image/jpeg', name: file.name.replace(/\.[^.]+$/, '') + '.jpg' };
+  } catch (e) { /* keep the original */ }
+  return { blob: file, type: file.type, name: file.name };
+}
+
+let openBlobUrl = null;
+async function docOpenSheet(id) {
+  const meta = byId(state.documents, id);
+  const f = await getFile(id);
+  if (!meta || !f) { toast(t('docMissing'), 'error'); return; }
+  const blob = new Blob([f.data], { type: f.type });
+  if (openBlobUrl) URL.revokeObjectURL(openBlobUrl);
+  openBlobUrl = URL.createObjectURL(blob);
+  const isImg = f.type.startsWith('image/');
+  openSheet(meta.name, `${isImg ? `<img class="doc-preview" src="${openBlobUrl}" alt="">` : `<p class="muted">${esc(t('pdfFile'))} · ${fmtSize(meta.size)}</p>`}
+    <button class="btn block" data-action="docShare" data-id="${id}">${esc(t('openShare'))}</button>`, (wrap) => { wrap.blob = blob; });
+}
+
+function removeDocs(predicate) {
+  const gone = state.documents.filter(predicate);
+  for (const d of gone) deleteFile(d.id).catch(() => {});
+  state.documents = state.documents.filter((d) => !predicate(d));
+}
+
+// ---------- diagnostics ----------
+const DIAG_TYPES = ['dpe', 'electricity', 'gas', 'erp', 'lead', 'asbestos', 'surface', 'other'];
+
+function diagnosticsSection(p) {
+  const td = today();
+  const list = p.diagnostics || [];
+  return `<section class="card flush">
+    <div class="card-head pad"><h3>${esc(t('diagnostics'))}</h3><button class="btn small secondary" data-action="diagAdd" data-property="${p.id}">+ ${esc(t('add'))}</button></div>
+    ${list.length ? `<ul class="list">${list.map((d) => {
+      const st = !d.expiry ? pill('paid', t('noExpiry')) : d.expiry < td ? pill('late', t('expired')) : d.expiry <= addDays(td, 90) ? pill('partial', fmtDate(d.expiry)) : pill('upcoming', fmtDate(d.expiry));
+      return `<li class="row"><button class="row-main as-link" data-action="diagEdit" data-property="${p.id}" data-id="${d.id}"><strong>${esc(t('diag_' + d.type))}</strong><span class="muted small">${esc(t('doneOn', { date: fmtDate(d.date) }))}</span></button><div class="row-side">${st}</div></li>`;
+    }).join('')}</ul>` : `<p class="pad muted small pb">${esc(t('noDiagnostics'))}</p>`}
+  </section>`;
+}
+
+function diagSheet(propertyId, diagId) {
+  const p = prop(propertyId);
+  const d = diagId ? (p.diagnostics || []).find((x) => x.id === diagId) : { type: 'dpe', date: '', expiry: '' };
+  openSheet(diagId ? t('editDiagnostic') : t('addDiagnostic'), `<form class="form" data-form="diag" data-property="${p.id}" data-id="${diagId || ''}">
+    ${field(t('type'), select('type', DIAG_TYPES.map((x) => [x, t('diag_' + x)]), d.type, 'data-change="diagAuto"'))}
+    <div class="grid2">
+      ${field(t('diagDate'), input('date', d.date, 'type="date" required data-change="diagAuto"'))}
+      ${field(t('expiry'), input('expiry', d.expiry, 'type="date"'), t('expiryHint'))}
+    </div>
+    ${field(t('dpeClassIfDpe'), select('dpeClass', [['', '—'], ...'ABCDEFG'.split('').map((x) => [x, x])], p.dpe || ''))}
+    <p class="hint">${esc(t('diagHint'))}</p>
+    <button class="btn block" type="submit">${esc(t('save'))}</button>
+    ${diagId ? `<button type="button" class="btn danger ghost block" data-action="diagDelete" data-property="${p.id}" data-id="${diagId}">${esc(t('delete'))}</button>` : ''}
+  </form>`);
+}
+
+// ---------- one-off charges and credits ----------
+function adjustmentsSection(l, led) {
+  const items = led.adjustments;
+  return `<section class="card flush">
+    <div class="card-head pad"><h3>${esc(t('otherItems'))}</h3><button class="btn small secondary" data-action="adjAdd" data-lease="${l.id}">+ ${esc(t('add'))}</button></div>
+    ${items.length ? `<ul class="list">${items.map((a) => `<li class="row">
+      <div class="row-main"><strong>${esc(a.label || t('adj_' + (a.adjKind || 'other')))}</strong><span class="muted small">${fmtDate(a.date)} · ${esc(t('adj_' + (a.adjKind || 'other')))}</span></div>
+      <div class="row-side"><span class="amount">${a.credit ? '- ' + fmtMoney(-a.total) : fmtMoney(a.total)}</span>${a.credit ? '' : pill(a.late ? 'late' : a.status)}</div>
+      <button class="link danger" data-action="adjDelete" data-lease="${l.id}" data-id="${a.id}">${esc(t('delete'))}</button></li>`).join('')}</ul>` : `<p class="pad muted small pb">${esc(t('noOtherItems'))}</p>`}
+  </section>`;
+}
+
+function adjSheet(leaseId) {
+  openSheet(t('addOtherItem'), `<form class="form" data-form="adj" data-lease="${leaseId}">
+    ${field(t('type'), select('sign', [['charge', t('adjCharge')], ['credit', t('adjCredit')]], 'charge'))}
+    ${field(t('label'), input('label', '', `required placeholder="${esc(t('adjLabelPh'))}"`))}
+    <div class="grid2">
+      ${moneyField(t('amount'), 'amount', null, '', 'required')}
+      ${field(t('date'), input('date', today(), 'type="date" required'))}
+    </div>
+    <button class="btn block" type="submit">${esc(t('save'))}</button>
+  </form>`);
+}
+
+// ---------- other letters ----------
+function lettersSheet(leaseId) {
+  const l = leaseOf(leaseId);
+  const led = ledger(l, state.payments, today());
+  openSheet(t('otherLetters'), `
+    <form class="form" data-form="letterCert" data-lease="${l.id}">
+      <h3>${esc(t('rentCertificate'))}</h3>
+      <p class="hint">${esc(t('rentCertificateHint'))}</p>
+      <label class="check"><input type="checkbox" name="upToDate" ${led.overdue > 0 ? 'disabled' : 'checked'}> ${esc(t('certUpToDate'))}</label>
+      <button class="btn block secondary" type="submit">${icon('doc')} ${esc(t('createPdf'))}</button>
+    </form>
+    <hr>
+    <form class="form" data-form="letterDeposit" data-lease="${l.id}">
+      <h3>${esc(t('depositReceipt'))}</h3>
+      ${l.deposit ? field(t('receivedOn'), input('date', l.startDate, 'type="date"')) : `<p class="note warn">${esc(t('noDeposit'))}</p>`}
+      <button class="btn block secondary" type="submit" ${l.deposit ? '' : 'disabled'}>${icon('doc')} ${esc(t('createPdf'))}</button>
+    </form>
+    <hr>
+    <form class="form" data-form="letterGuarantor" data-lease="${l.id}">
+      <h3>${esc(t('guarantorAgreement'))}</h3>
+      <p class="hint">${esc(t('guarantorHint'))}</p>
+      ${field(t('guarantorName'), input('name', (l.guarantor || '').split(',')[0], 'required'))}
+      ${field(t('guarantorAddress'), input('address', (l.guarantor || '').split(',').slice(1).join(',').trim()))}
+      <div class="grid2">
+        ${field(t('guaranteeType'), select('solidaire', [['1', t('solidaire')], ['0', t('simple')]], '1'))}
+        ${field(t('durationYears'), input('years', '3', 'type="number" min="0" max="20" inputmode="numeric"'), t('durationHint'))}
+      </div>
+      ${moneyField(t('maxAmount'), 'maxAmount', (currentRent(l, today()).rent + currentRent(l, today()).charges) * 36, t('maxAmountHint'))}
+      <button class="btn block secondary" type="submit">${icon('doc')} ${esc(t('createPdf'))}</button>
+    </form>`);
 }
 
 // ---------------------------------------------------------------- after render (canvas etc.)
@@ -812,10 +1471,11 @@ async function makePdf(build) {
   if (!window.jspdf) { toast(t('pdfLibMissing'), 'error'); return; }
   if (!state.settings.landlord.name) toast(t('missingLandlordShort'));
   try {
-    await deliver(build());
+    return await deliver(build());
   } catch (e) {
     console.error(e);
     toast(t('pdfError'), 'error');
+    return null;
   }
 }
 
@@ -868,6 +1528,7 @@ const actions = {
       s.properties = s.properties.filter((x) => x.id !== d.id);
       s.leases = s.leases.filter((l) => !leaseIds.has(l.id));
       s.payments = s.payments.filter((x) => !leaseIds.has(x.leaseId));
+      removeDocs((doc) => doc.ownerId === d.id || leaseIds.has(doc.ownerId));
       s.expenses = s.expenses.map((e) => (e.propertyId === d.id ? { ...e, propertyId: '' } : e));
     });
     location.hash = '#/properties';
@@ -877,12 +1538,13 @@ const actions = {
     commit((s) => {
       s.leases = s.leases.filter((x) => x.id !== d.id);
       s.payments = s.payments.filter((x) => x.leaseId !== d.id);
+      removeDocs((doc) => doc.ownerId === d.id);
     });
     location.hash = '#/leases';
   },
   deleteExpense: (d) => {
     if (!confirm(t('confirmDeleteExpense'))) return;
-    commit((s) => { s.expenses = s.expenses.filter((x) => x.id !== d.id); });
+    commit((s) => { s.expenses = s.expenses.filter((x) => x.id !== d.id); removeDocs((doc) => doc.ownerId === d.id); });
     location.hash = '#/expenses';
   },
   lang: (d) => {
@@ -913,9 +1575,17 @@ const actions = {
     }
   },
   backup: async () => {
+    const blob = await backupBlob(state, true);
+    openSheet(t('backupTitle'), `<p>${esc(t('backupReady', { size: fmtSize(blob.size), n: state.documents.length }))}</p>
+      <p class="hint">${esc(t('backupSaveHint'))}</p>
+      <button class="btn block" data-action="backupSave">${esc(t('saveToFiles'))}</button>`, (wrap) => { wrap.blob = blob; });
+  },
+  backupSave: async (d, el) => {
+    const wrap = el.closest('.sheet-wrap');
     const name = `gestion-locative-sauvegarde-${today()}.json`;
-    const res = await shareFile(backupBlob(state), name, 'application/json');
+    const res = await shareFile(wrap.blob, name, 'application/json');
     if (res !== 'cancelled') {
+      closeSheet();
       commit((s) => { s.settings.lastBackup = today(); });
       toast(t('backupDone'));
     }
@@ -928,9 +1598,10 @@ const actions = {
       const file = inp.files && inp.files[0];
       if (!file) return;
       try {
-        const next = parseBackup(await file.text());
+        const { state: next, files } = parseBackup(await file.text());
         const msg = t('confirmRestore', { p: next.properties.length, l: next.leases.length, pay: next.payments.length });
         if (!confirm(msg)) return;
+        await restoreFiles(files);
         state = next;
         setLang(state.settings.lang);
         await persist();
@@ -950,6 +1621,7 @@ const actions = {
     const lang = state.settings.lang;
     state = emptyState();
     state.settings.lang = lang;
+    await clearFiles().catch(() => {});
     await persist();
     location.hash = '#/';
     render();
@@ -1018,6 +1690,7 @@ const forms = {
       irl,
       revisionDate: rev ? rev.slice(5) : null,
       lastRevision: f.get('lastRevision') || null,
+      insuranceUntil: f.get('insuranceUntil') || null,
       notes: f.get('notes').trim(),
     };
     if (!existing) {
@@ -1148,6 +1821,375 @@ const changes = {
   },
 };
 
+// ---------------------------------------------------------------- v1.1 handlers
+
+Object.assign(actions, {
+  // deadlines & reminders
+  addReminder: () => reminderSheet(),
+  fillReminder: (d, el) => {
+    const f = el.closest('form');
+    f.elements.title.value = d.title;
+    if (d.date) f.elements.date.value = d.date;
+  },
+  reminderDone: (d) => commit((s) => {
+    const r = s.reminders.find((x) => x.id === d.id);
+    if (!r) return;
+    if (r.repeat === 'yearly') { let next = addYears(r.date, 1); while (next < today()) next = addYears(next, 1); r.date = next; }
+    else r.done = true;
+  }),
+  reminderDelete: (d) => {
+    if (!confirm(t('confirmDelete'))) return;
+    commit((s) => { s.reminders = s.reminders.filter((x) => x.id !== d.id); });
+  },
+  insuranceUpdate: (d) => insuranceSheet(d.lease),
+  exportIcs: () => {
+    const td = today();
+    const items = deadlines(state, td).filter((i) => !i.soft && i.date >= td);
+    if (!items.length) { toast(t('noDeadlines')); return; }
+    const events = items.map((i) => ({ uid: i.id, date: i.date, title: `${dlTitle(i)}${i.who && i.who !== '—' ? ' – ' + i.who : ''}`, description: dlSub(i) }));
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+    shareFile(new Blob([buildIcs(events, stamp)], { type: 'text/calendar' }), 'echeances-locatives.ics', 'text/calendar');
+  },
+
+  // monthly batch
+  batchSend: async (d) => {
+    const l = leaseOf(d.lease);
+    const email = (l.tenants || []).map((x) => x.email).filter(Boolean).join(', ');
+    if (email && navigator.clipboard) navigator.clipboard.writeText(email).catch(() => {});
+    const built = batchDoc(d.type, l, d.period);
+    if (!built) return;
+    toast(email ? t('emailCopied', { email }) : t('noEmail'));
+    const res = await makePdf(() => built);
+    if (res && res !== 'cancelled') commit((s) => { s.sent[`${d.type}:${l.id}:${d.period}`] = today(); });
+  },
+  batchAll: (d) => {
+    const list = leasesInPeriod(d.period);
+    let doc = null;
+    for (const l of list) {
+      if (d.type === 'receipt') {
+        const row = ledger(l, state.payments, today()).rows.find((x) => x.period === d.period);
+        if (!row || row.paid < row.total || row.total <= 0) continue;
+      }
+      if (doc) doc.addPage(); else doc = newPdf();
+      batchDoc(d.type, l, d.period, doc);
+    }
+    if (doc) makePdf(() => ({ doc, name: `${d.type === 'receipt' ? 'Quittances' : 'Avis-echeance'}_${d.period}.pdf` }));
+  },
+
+  // bank import
+  importPick: () => {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = '.csv,.txt,text/csv,text/plain,application/vnd.ms-excel';
+    inp.onchange = async () => {
+      const file = inp.files && inp.files[0];
+      if (!file) return;
+      try {
+        const text = await readText(file);
+        const { rows } = parseCsv(text);
+        const map = guessMapping(rows) || { headerRow: -1, date: 0, label: 1, amount: 2, debit: -1, credit: -1 };
+        sessions.import = { fileName: file.name, rows, map, txs: [], choices: {} };
+        rebuildImport();
+        render();
+      } catch (e) {
+        console.error(e);
+        toast(t('importFailed'), 'error');
+      }
+    };
+    inp.click();
+  },
+  importReset: () => { sessions.import = null; render(); },
+  importApply: () => {
+    const s = sessions.import;
+    const add = [];
+    for (const tx of s.txs) {
+      const c = s.choices[tx.fp];
+      if (tx.amount > 0 && c && c.on && c.leaseId && !c.dup) {
+        add.push({ id: uid(), leaseId: c.leaseId, amount: tx.amount, date: tx.date, method: 'transfer', note: tx.label.slice(0, 60), bankRef: tx.fp, bankLabel: tx.label });
+      }
+    }
+    sessions.import = null;
+    commit((st) => { st.payments.push(...add); });
+    toast(t('importDone', { n: add.length }));
+    location.hash = '#/';
+  },
+
+  // charges reconciliation
+  regReload: (d) => {
+    const [leaseId, year] = d.key.split(':');
+    const l = leaseOf(leaseId);
+    sessions.reg[d.key].lines = recoverableExpenses(state, l.propertyId, Number(year)).map((x) => ({ label: x.label, amount: x.amount }));
+    render();
+  },
+  regLineAdd: (d) => { sessions.reg[d.key].lines.push({ label: '', amount: 0 }); render(); },
+  regLineDel: (d) => { sessions.reg[d.key].lines.splice(Number(d.i), 1); render(); },
+  regLetter: (d) => {
+    const l = leaseOf(d.lease);
+    const ses = sessions.reg[d.key];
+    const reg = regularization(l, Number(d.year), ses.lines);
+    makePdf(() => regularizationPdf(state, l, reg, ses.lines.filter((x) => x.amount), {
+      dueDate: ses.dueDate,
+      newMonthly: ses.updateProvision && isActive(l, today()) ? ses.newMonthly : null,
+      newFrom: ses.newFrom || periodOf(ses.dueDate),
+    }));
+  },
+  regUndo: (d) => {
+    if (!confirm(t('confirmUndoReg'))) return;
+    const y = Number(d.year);
+    commit((s) => {
+      const l = s.leases.find((x) => x.id === d.lease);
+      l.adjustments = (l.adjustments || []).filter((a) => !(a.kind === 'regularization' && a.regYear === y));
+      if (l.regularizations) delete l.regularizations[y];
+    });
+  },
+
+  // departure
+  depSave: (d) => {
+    const l = leaseOf(d.lease);
+    const ses = departureSession(l);
+    if (ses.keysDate < l.startDate) { toast(t('endBeforeStart'), 'error'); return; }
+    commit((s) => {
+      const x = s.leases.find((y) => y.id === l.id);
+      x.endDate = ses.keysDate;
+      x.departure = { ...(x.departure || {}), ...ses, deductions: ses.deductions.map((z) => ({ ...z })) };
+    });
+    toast(t('saved'));
+  },
+  depDedAdd: (d) => { departureSession(leaseOf(d.lease)).deductions.push({ label: '', amount: 0 }); render(); },
+  depDedDel: (d) => { departureSession(leaseOf(d.lease)).deductions.splice(Number(d.i), 1); persistDeparture(d.lease); render(); },
+  depPdf: (d) => {
+    const l = leaseOf(d.lease);
+    const { ses, tmp, st } = departureData(l);
+    makePdf(() => departurePdf(state, tmp, st, ses));
+  },
+  depReturned: (d) => depReturnedSheet(d.lease),
+
+  // tax
+  taxPdf: (d) => {
+    const s = taxSummary(state, Number(d.year), today());
+    const labels = {};
+    for (const k of ['221', '222', '223', '224', '227', '229', '250']) labels[k] = LINE_LABELS_FR[k];
+    makePdf(() => taxSummaryPdf(state, s, labels));
+  },
+  taxCsv: (d) => {
+    const csv = yearCsv(state, Number(d.year));
+    shareFile(new Blob([csv], { type: 'text/csv' }), `comptes-locatifs-${d.year}.csv`, 'text/csv');
+  },
+
+  // documents
+  docAdd: (d) => docAddSheet(d.type, d.owner),
+  docOpen: (d) => { docOpenSheet(d.id); },
+  docShare: (d, el) => {
+    const wrap = el.closest('.sheet-wrap');
+    const meta = byId(state.documents, d.id);
+    if (wrap && wrap.blob && meta) shareFile(wrap.blob, meta.name, wrap.blob.type);
+  },
+  docDelete: (d) => {
+    if (!confirm(t('confirmDelete'))) return;
+    commit((s) => { removeDocs((x) => x.id === d.id); });
+  },
+
+  // diagnostics
+  diagAdd: (d) => diagSheet(d.property, null),
+  diagEdit: (d) => diagSheet(d.property, d.id),
+  diagDelete: (d) => {
+    if (!confirm(t('confirmDelete'))) return;
+    closeSheet();
+    commit((s) => { const p = s.properties.find((x) => x.id === d.property); p.diagnostics = p.diagnostics.filter((x) => x.id !== d.id); });
+  },
+
+  // one-off charges / credits
+  adjAdd: (d) => adjSheet(d.lease),
+  adjDelete: (d) => {
+    if (!confirm(t('confirmDelete'))) return;
+    commit((s) => { const l = s.leases.find((x) => x.id === d.lease); l.adjustments = l.adjustments.filter((a) => a.id !== d.id); });
+  },
+
+  letters: (d) => lettersSheet(d.lease),
+});
+
+function persistDeparture(leaseId) {
+  const l = leaseOf(leaseId);
+  if (!l.departure || !l.departure.keysDate) return; // only once the departure was saved
+  const ses = departureSession(l);
+  commit((s) => {
+    const x = s.leases.find((y) => y.id === leaseId);
+    x.departure = { ...x.departure, inventoryMatches: ses.inventoryMatches, deductions: ses.deductions.map((z) => ({ ...z })), retention: ses.retention, newAddress: ses.newAddress };
+  });
+}
+
+Object.assign(forms, {
+  reminder: (f) => {
+    const r = { id: uid(), title: f.get('title').trim(), date: f.get('date'), repeat: f.get('yearly') ? 'yearly' : 'none', propertyId: f.get('propertyId') };
+    closeSheet();
+    commit((s) => { s.reminders.push(r); });
+    toast(t('saved'));
+  },
+  insurance: (f, form) => {
+    const until = f.get('until');
+    closeSheet();
+    commit((s) => { s.leases.find((x) => x.id === form.dataset.lease).insuranceUntil = until; });
+    toast(t('saved'));
+  },
+  regApply: (f, form) => {
+    const l = leaseOf(form.dataset.lease);
+    const year = Number(form.dataset.year);
+    const ses = sessions.reg[form.dataset.key];
+    const reg = regularization(l, year, ses.lines);
+    const dueDate = f.get('dueDate') || ses.dueDate || today();
+    const update = ses.updateProvision && isActive(l, today());
+    const newFrom = ses.newFrom || periodOf(dueDate);
+    commit((s) => {
+      const x = s.leases.find((y) => y.id === l.id);
+      x.adjustments = (x.adjustments || []).filter((a) => !(a.kind === 'regularization' && a.regYear === year));
+      if (reg.balance !== 0) {
+        x.adjustments.push({ id: uid(), date: dueDate, label: `Régularisation des charges ${year}`, amount: reg.balance, kind: 'regularization', regYear: year });
+      }
+      if (update && ses.newMonthly !== null && ses.newMonthly !== undefined) {
+        const r = rentAt(x, newFrom);
+        x.rents = (x.rents || []).filter((y) => y.from !== newFrom);
+        x.rents.push({ from: newFrom, rent: r.rent, charges: ses.newMonthly, reason: 'regularization' });
+      }
+      x.regularizations = { ...(x.regularizations || {}), [year]: { date: today(), balance: reg.balance, actual: reg.actualTotal, provisions: reg.provisions, tenantShare: reg.tenantShare } };
+    });
+    delete sessions.reg[form.dataset.key];
+    toast(t('regApplied'));
+    location.hash = `#/lease/${l.id}`;
+  },
+  depReturned: (f, form) => {
+    const l = leaseOf(form.dataset.lease);
+    const { ses, led, st } = departureData(l);
+    const date = f.get('date') || today();
+    const amount = parseMoney(f.get('amount')) || 0;
+    closeSheet();
+    commit((s) => {
+      const x = s.leases.find((y) => y.id === l.id);
+      x.adjustments = x.adjustments || [];
+      for (const dd of ses.deductions) {
+        if (dd.amount > 0) x.adjustments.push({ id: uid(), date: ses.keysDate, label: dd.label || 'Retenue sur dépôt', amount: dd.amount, kind: 'deduction' });
+      }
+      if (st.credit > 0) x.adjustments.push({ id: uid(), date, label: 'Remboursement du trop-perçu', amount: st.credit, kind: 'refund' });
+      const covered = Math.min(st.deposit - st.retention, st.arrears + st.deductions);
+      if (covered > 0) s.payments.push({ id: uid(), leaseId: x.id, amount: covered, date, method: 'deposit', note: 'Imputé sur le dépôt de garantie' });
+      x.departure = { ...(x.departure || {}), ...ses, returnedOn: date, returnedAmount: amount, statement: { ...st, returnedOn: date } };
+    });
+    void led;
+    toast(t('saved'));
+  },
+  docAdd: async (f, form) => {
+    const files = [...form.elements.files.files];
+    if (!files.length) return;
+    const category = f.get('category');
+    const btn = form.querySelector('button[type=submit]');
+    btn.disabled = true;
+    const added = [];
+    try {
+      for (const file of files) {
+        const c = file.type.startsWith('image/') ? await compressImage(file) : { blob: file, type: file.type || 'application/octet-stream', name: file.name };
+        const data = await c.blob.arrayBuffer();
+        const id = uid();
+        await putFile(id, { name: c.name, type: c.type, data });
+        added.push({ id, ownerType: form.dataset.type, ownerId: form.dataset.owner, name: c.name, type: c.type, size: data.byteLength, category, date: today() });
+      }
+    } catch (e) {
+      console.error(e);
+      toast(t('docSaveFailed'), 'error');
+    }
+    closeSheet();
+    if (added.length) {
+      commit((s) => { s.documents.push(...added); });
+      toast(t('docsAdded', { n: added.length }));
+    }
+  },
+  diag: (f, form) => {
+    const pid = form.dataset.property;
+    const id = form.dataset.id || uid();
+    const d = { id, type: f.get('type'), date: f.get('date'), expiry: f.get('expiry') || '' };
+    closeSheet();
+    commit((s) => {
+      const p = s.properties.find((x) => x.id === pid);
+      p.diagnostics = (p.diagnostics || []).filter((x) => x.id !== id);
+      p.diagnostics.push(d);
+      if (d.type === 'dpe' && f.get('dpeClass')) p.dpe = f.get('dpeClass');
+    });
+  },
+  adj: (f, form) => {
+    const amount = parseMoney(f.get('amount'));
+    if (!amount || amount <= 0) { toast(t('amountInvalid'), 'error'); return; }
+    const a = { id: uid(), date: f.get('date'), label: f.get('label').trim(), amount: f.get('sign') === 'credit' ? -amount : amount, kind: 'other' };
+    closeSheet();
+    commit((s) => { const l = s.leases.find((x) => x.id === form.dataset.lease); l.adjustments = [...(l.adjustments || []), a]; });
+  },
+  letterCert: (f, form) => {
+    const l = leaseOf(form.dataset.lease);
+    makePdf(() => rentCertificatePdf(state, l, currentRent(l, today()), { upToDate: !!f.get('upToDate') }));
+  },
+  letterDeposit: (f, form) => {
+    const l = leaseOf(form.dataset.lease);
+    makePdf(() => depositReceiptPdf(state, l, { date: f.get('date') || l.startDate }));
+  },
+  letterGuarantor: (f, form) => {
+    const l = leaseOf(form.dataset.lease);
+    const years = Number(f.get('years')) || null;
+    const g = { name: f.get('name').trim(), address: f.get('address').trim(), solidaire: f.get('solidaire') === '1', years, maxAmount: parseMoney(f.get('maxAmount')) || 0 };
+    makePdf(() => guarantorPdf(state, l, g, currentRent(l, today())));
+  },
+});
+
+Object.assign(changes, {
+  batchPeriod: (el) => { location.hash = `#/batch?type=${el.dataset.type}&period=${el.value}`; },
+  taxYear: (el) => { location.hash = `#/tax?year=${el.value}`; },
+  regYear: (el) => { location.hash = `#/regularize/${el.dataset.lease}?year=${el.value}`; },
+  impToggle: (el) => { const c = sessions.import.choices[el.dataset.fp]; c.on = el.checked; render(); },
+  impLease: (el) => { const c = sessions.import.choices[el.dataset.fp]; c.leaseId = el.value; c.on = !!el.value; render(); },
+  impMap: (el) => {
+    const s = sessions.import;
+    s.map[el.dataset.k] = Number(el.value);
+    s.choices = {};
+    rebuildImport();
+    render();
+  },
+  regLine: (el) => {
+    const line = sessions.reg[el.dataset.key].lines[Number(el.dataset.i)];
+    if (el.dataset.f === 'amount') line.amount = parseMoney(el.value) || 0;
+    else line.label = el.value;
+    render();
+  },
+  regOpt: (el) => {
+    const ses = sessions.reg[el.dataset.key];
+    const k = el.dataset.f;
+    if (k === 'updateProvision') ses.updateProvision = el.checked;
+    else if (k === 'newMonthly') ses.newMonthly = parseMoney(el.value) || 0;
+    else ses[k] = el.value;
+    render();
+  },
+  depField: (el) => {
+    const dl0 = leaseOf(el.dataset.lease);
+    if (dl0.departure && dl0.departure.returnedOn) { render(); return; }
+    const ses = departureSession(dl0);
+    const k = el.dataset.f;
+    if (k === 'inventoryMatches') ses.inventoryMatches = el.checked;
+    else if (k === 'retention') ses.retention = parseMoney(el.value) || 0;
+    else ses[k] = el.value;
+    persistDeparture(el.dataset.lease);
+    render();
+  },
+  depDed: (el) => {
+    const dl0 = leaseOf(el.dataset.lease);
+    if (dl0.departure && dl0.departure.returnedOn) { render(); return; }
+    const line = departureSession(leaseOf(el.dataset.lease)).deductions[Number(el.dataset.i)];
+    if (el.dataset.f === 'amount') line.amount = parseMoney(el.value) || 0;
+    else line.label = el.value;
+    persistDeparture(el.dataset.lease);
+    render();
+  },
+  diagAuto: (el) => {
+    const f = el.form;
+    const exp = defaultExpiry(f.elements.type.value, f.elements.date.value);
+    if (exp || el.name === 'type') f.elements.expiry.value = exp;
+  },
+});
+
 // ---------------------------------------------------------------- boot
 
 document.addEventListener('click', (e) => {
@@ -1174,20 +2216,30 @@ window.addEventListener('hashchange', () => { closeSheet(); render(); });
 
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
+  let offered = false;
+  const offer = (worker) => {
+    if (offered) return;
+    offered = true;
+    const bar = document.createElement('div');
+    bar.className = 'update-bar';
+    bar.innerHTML = `<span>${esc(t('updateReady'))}</span><button class="btn small">${esc(t('reload'))}</button>`;
+    bar.querySelector('button').onclick = () => worker.postMessage('skipWaiting');
+    document.body.appendChild(bar);
+  };
+  // A new version can be found while the app starts, so watch every stage.
+  const track = (w) => {
+    if (!w) return;
+    const check = () => { if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w); };
+    check();
+    w.addEventListener('statechange', check);
+  };
   navigator.serviceWorker.register('./sw.js').then((reg) => {
-    const offer = (worker) => {
-      const bar = document.createElement('div');
-      bar.className = 'update-bar';
-      bar.innerHTML = `<span>${esc(t('updateReady'))}</span><button class="btn small">${esc(t('reload'))}</button>`;
-      bar.querySelector('button').onclick = () => worker.postMessage('skipWaiting');
-      document.body.appendChild(bar);
-    };
     if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
-    reg.addEventListener('updatefound', () => {
-      const w = reg.installing;
-      w.addEventListener('statechange', () => {
-        if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w);
-      });
+    track(reg.installing);
+    reg.addEventListener('updatefound', () => track(reg.installing));
+    // An installed iPhone app can stay open for days: look for updates when it comes back.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reg.update().catch(() => {});
     });
   }).catch(() => {});
   // Reload only when an update replaces a running version, not on first install.

@@ -84,7 +84,7 @@ export function fmtMoney(cents, { symbol = true } = {}) {
 // Accepts "1234.5", "1 234,50", "1234,5 €". Returns cents or null.
 export function parseMoney(input) {
   if (input === null || input === undefined) return null;
-  let s = String(input).replace(/[\s  €]/g, '');
+  let s = String(input).replace(/[\s\u00a0\u202f€]/g, '');
   if (s === '') return null;
   if (s.includes(',') && s.includes('.')) {
     // "1.234,56" or "1,234.56": the last separator is the decimal one.
@@ -116,8 +116,72 @@ export function esc(v) {
 export function slug(s) {
   return String(s || '')
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^A-Za-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 40);
+}
+
+// ---------- Amounts in French words (for the guarantor agreement) ----------
+const UNITS_FR = ['zéro', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix', 'onze', 'douze',
+  'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf'];
+const TENS_FR = ['', '', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'soixante', 'quatre-vingt', 'quatre-vingt'];
+
+function below100(n) {
+  if (n < 20) return UNITS_FR[n];
+  const t = Math.floor(n / 10);
+  const u = n % 10;
+  if (t === 7 || t === 9) {
+    if (t === 7 && u === 1) return 'soixante et onze';
+    return `${TENS_FR[t]}-${UNITS_FR[10 + u]}`;
+  }
+  if (u === 0) return t === 8 ? 'quatre-vingts' : TENS_FR[t];
+  if (u === 1 && t !== 8) return `${TENS_FR[t]} et un`;
+  return `${TENS_FR[t]}-${UNITS_FR[u]}`;
+}
+
+// final = nothing (or "millions") follows, so "cents"/"vingts" keep their s.
+function below1000(n, final) {
+  const h = Math.floor(n / 100);
+  const r = n % 100;
+  let s = '';
+  if (h) s = `${h > 1 ? UNITS_FR[h] + ' ' : ''}cent${h > 1 && r === 0 && final ? 's' : ''}`;
+  if (r) {
+    let w = below100(r);
+    if (!final && w === 'quatre-vingts') w = 'quatre-vingt';
+    s += (s ? ' ' : '') + w;
+  }
+  return s;
+}
+
+export function numberToFrench(n) {
+  n = Math.floor(Math.abs(n));
+  if (n === 0) return 'zéro';
+  const parts = [];
+  const m = Math.floor(n / 1e6);
+  const th = Math.floor(n / 1000) % 1000;
+  const rest = n % 1000;
+  if (m) parts.push(`${below1000(m, true)} million${m > 1 ? 's' : ''}`);
+  if (th) parts.push(th === 1 ? 'mille' : `${below1000(th, false)} mille`);
+  if (rest) parts.push(below1000(rest, true));
+  return parts.join(' ');
+}
+
+export function amountInFrench(cents) {
+  const euros = Math.floor(Math.abs(cents) / 100);
+  const c = Math.abs(cents) % 100;
+  const exactMillion = euros > 0 && euros % 1e6 === 0;
+  let s = `${numberToFrench(euros)} ${exactMillion ? "d'euros" : euros > 1 ? 'euros' : 'euro'}`;
+  if (c) s += ` et ${numberToFrench(c)} centime${c > 1 ? 's' : ''}`;
+  return s;
+}
+
+export function daysBetween(a, b) {
+  const [y1, m1, d1] = a.split('-').map(Number);
+  const [y2, m2, d2] = b.split('-').map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
+}
+
+export function normalizeText(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
 }

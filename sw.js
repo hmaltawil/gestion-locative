@@ -1,6 +1,6 @@
 // Offline support: keeps a copy of the app files on the phone.
 // Bump VERSION whenever a file changes so phones pick up the update.
-const VERSION = 'v1.0.0';
+const VERSION = 'v1.1.0';
 const CACHE = 'gestion-locative-' + VERSION;
 const FILES = [
   './',
@@ -8,6 +8,10 @@ const FILES = [
   './manifest.webmanifest',
   './css/app.css',
   './js/app.js',
+  './js/bank.js',
+  './js/charges.js',
+  './js/deadlines.js',
+  './js/tax.js',
   './js/calc.js',
   './js/docs.js',
   './js/i18n.js',
@@ -20,8 +24,10 @@ const FILES = [
   './icons/apple-touch-icon.png',
 ];
 
+// cache: 'reload' skips the browser's HTTP cache, so a new version never
+// stores files left over from the previous one.
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)));
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))));
 });
 
 self.addEventListener('activate', (event) => {

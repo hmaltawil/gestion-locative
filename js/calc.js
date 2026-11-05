@@ -66,34 +66,54 @@ export function firstTrackedPeriod(lease) {
 }
 
 // Full account of a lease up to the current month.
-// Payments are applied oldest-first: first to the opening balance, then to
-// each month in order. This handles late, partial and catch-up payments.
+// Payments are applied oldest-first: to the opening balance, each month and
+// any one-off charge, in order of due date. This handles late, partial and
+// catch-up payments. Each debt keeps its allocations (date, amount) so the
+// tax summary can tell when the money was actually received.
+const KIND_ORDER = { opening: 0, period: 1, adjustment: 2 };
+
 export function ledger(lease, allPayments, today) {
   const currentP = periodOf(today);
   const startP = firstTrackedPeriod(lease);
   let endP = currentP;
   if (lease.endDate && periodOf(lease.endDate) < endP) endP = periodOf(lease.endDate);
+  const trackStart = lease.trackFrom ? `${lease.trackFrom}-01` : lease.startDate;
 
   const debts = [];
   const opening = Number(lease.openingBalance) || 0;
   if (opening > 0) {
-    debts.push({ kind: 'opening', total: opening, paid: 0, dueDate: lease.trackFrom ? `${lease.trackFrom}-01` : lease.startDate, paidDate: null });
+    debts.push({ kind: 'opening', label: 'opening', total: opening, paid: 0, dueDate: trackStart, paidDate: null, allocations: [] });
   }
   const rows = [];
   if (startP) {
     for (let p = startP; p <= endP; p = addMonths(p, 1)) {
       const d = dueForPeriod(lease, p);
-      const row = { ...d, kind: 'period', dueDate: dueDateFor(lease, p), paid: 0, paidDate: null };
+      const row = { ...d, kind: 'period', dueDate: dueDateFor(lease, p), paid: 0, paidDate: null, allocations: [] };
       rows.push(row);
       debts.push(row);
     }
   }
+  const pool = [];
+  const adjustments = [];
+  for (const a of lease.adjustments || []) {
+    const amount = Number(a.amount) || 0;
+    if (amount > 0) {
+      const debt = { ...a, kind: 'adjustment', adjKind: a.kind, total: amount, paid: 0, dueDate: a.date, paidDate: null, allocations: [] };
+      debts.push(debt);
+      adjustments.push(debt);
+    } else if (amount < 0) {
+      pool.push({ date: a.date, left: -amount, real: false });
+      adjustments.push({ ...a, kind: 'adjustment', adjKind: a.kind, total: amount, paid: 0, credit: true });
+    }
+  }
+  debts.sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : KIND_ORDER[a.kind] - KIND_ORDER[b.kind]));
 
   const payments = allPayments
     .filter((x) => x.leaseId === lease.id)
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : String(a.id).localeCompare(String(b.id))));
-  const pool = payments.map((x) => ({ date: x.date, left: Number(x.amount) || 0 }));
-  if (opening < 0) pool.unshift({ date: lease.trackFrom ? `${lease.trackFrom}-01` : lease.startDate, left: -opening });
+  for (const x of payments) pool.push({ date: x.date, left: Number(x.amount) || 0, real: true, method: x.method });
+  if (opening < 0) pool.push({ date: trackStart, left: -opening, real: false });
+  pool.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
   let i = 0;
   for (const pay of pool) {
@@ -104,33 +124,36 @@ export function ledger(lease, allPayments, today) {
       const take = Math.min(need, pay.left);
       debt.paid += take;
       pay.left -= take;
+      debt.allocations.push({ date: pay.date, amount: take, real: pay.real });
       if (debt.paid >= debt.total) { debt.paidDate = pay.date; i++; }
     }
   }
   const credit = pool.reduce((s, p) => s + p.left, 0);
+  const unallocated = pool.filter((p) => p.real && p.left > 0).map((p) => ({ date: p.date, amount: p.left }));
 
   let overdue = 0;
   let owed = 0;
   for (const d of debts) {
     const rest = d.total - d.paid;
-    if (d.kind === 'period') {
-      if (d.total <= 0 || rest <= 0) d.status = 'paid';
-      else if (today <= d.dueDate) d.status = d.paid > 0 ? 'partial' : 'upcoming';
-      else d.status = d.paid > 0 ? 'partial' : 'unpaid';
-      d.late = rest > 0 && today > d.dueDate;
-    }
+    if (d.total <= 0 || rest <= 0) d.status = 'paid';
+    else if (today <= d.dueDate) d.status = d.paid > 0 ? 'partial' : 'upcoming';
+    else d.status = d.paid > 0 ? 'partial' : 'unpaid';
+    d.late = rest > 0 && today > d.dueDate;
     owed += rest;
-    if (rest > 0 && today > d.dueDate) overdue += rest;
+    if (d.late) overdue += rest;
   }
-  const lateRows = rows.filter((r) => r.late);
   return {
     rows,
+    debts,
+    adjustments,
     opening: debts.find((d) => d.kind === 'opening') || null,
     owed,
     overdue,
     credit,
+    unallocated,
     balance: owed - credit,
-    lateRows,
+    lateRows: rows.filter((r) => r.late),
+    lateItems: debts.filter((d) => d.late),
     payments,
   };
 }
