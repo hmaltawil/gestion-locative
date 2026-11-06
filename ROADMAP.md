@@ -2,9 +2,9 @@
 
 One place to see what's done, what's waiting, and what comes next. Update it at the end of each milestone.
 
-**Status:** ✅ done · 🔜 next · ⏳ waiting on someone · 💡 idea, not planned yet
+**Status:** ✅ done · 🔜 next · ⏳ waiting on someone · ⏸️ on hold · 💡 idea, not planned yet
 
-**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3), fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before) who paid on receipts, tenant or CAF (version 1.3.6), a warning for payments dated in the future (version 1.3.7) and a safety review (version 1.3.8: security, mistakes the app now questions, legal checks, backups). All of it is live and checked on the iPhone. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL), in milestone 5 (payment history) and in the [Ideas](#ideas-backlog). **Next:** milestone 5, as soon as the Gestion Locative Facile export files arrive; then milestone 6 with sample files from CIC and Crédit Agricole.
+**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3), fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before), who paid on receipts, tenant or CAF (version 1.3.6), a warning for payments dated in the future (version 1.3.7) and a safety review (version 1.3.8: security, mistakes the app now questions, legal checks, backups). All of it is live and checked on the iPhone. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL) and in the [Ideas](#ideas-backlog). **Next:** milestone 7, fixes from real use, as they come up. The two imports (milestones 5 and 6) are [on hold](#on-hold) since 6 Nov 2026: the user prefers to enter leases and payments by hand.
 
 ## How we work
 
@@ -174,8 +174,8 @@ Backups:
 
 - ✅ **GitHub backup set up** (5 Nov 2026) to the private repository `locatif-sauvegarde`. Passphrase on paper; revoke the token on GitHub if the phone is lost.
 - ⏳ **Optional, fewer permission prompts for Claude:** add `.claude/settings.json` to this repository yourself (Claude isn't allowed to change its own permissions).
-- ⏳ **Gestion Locative Facile export files** (format only, names replaced), for milestone 5. On a computer: log in at immobilierloyer.com, tick Outils › Préférences › Réglages › Réglages avancés › "Export des données", then use **Exporter** on each page. Export before cancelling the subscription.
-- ⏳ **Bank file samples** for milestone 6. The banks are **CIC** and **Crédit Agricole** (6 Nov 2026). One export from each, from the bank's website (not the monthly PDF statement): CSV if offered, otherwise Excel or OFX. Remove the account numbers and replace tenants' names before sending (this repository is public).
+- ⏸️ **Import files, on hold** (6 Nov 2026): the Gestion Locative Facile export files and the CIC and Crédit Agricole samples aren't needed while everything is entered by hand (see [On hold](#on-hold)).
+- ⏳ **Recommended anyway: export the Gestion Locative Facile data before cancelling that subscription**, and keep the files privately (not in this repository), in case something has to be checked or imported later. On a computer: log in at immobilierloyer.com, tick Outils › Préférences › Réglages › Réglages avancés › "Export des données", then use **Exporter** on each page.
 - ✅ **First check on the real iPhone:** everything works (5 Nov 2026)
   - [x] Add to Home Screen, then open from the icon
   - [x] Share menu: send a receipt by Mail
@@ -218,8 +218,17 @@ Backups:
 
 ## Next
 
-### 🔜 Milestone 5 · Version 1.4 · Import from Gestion Locative Facile
-Waiting for the CSV export files (format only, with names replaced). Decided 6 Nov 2026.
+### 🔜 Milestone 7 · Version 1.4 · Fixes from real use
+- [ ] Bugs and annoyances found on the iPhone
+- [ ] Search across tenants, properties and payments
+- [ ] Small wording and layout fixes
+
+### On hold
+
+⏸️ **Put on hold on 6 Nov 2026:** the user prefers to enter leases and payments by hand. The plans are kept here in case that changes.
+
+### ⏸️ Milestone 5 · Import from Gestion Locative Facile
+Would need the CSV export files (format only, with names replaced).
 Goal: no retyping of the 15 leases.
 - [ ] Read the CSV files exported from immobilierloyer.com (Locataires, Contrats, Loyers et paiements, Charges et frais, Biens if offered)
 - [ ] Create properties, tenants, leases (rent, charges, deposit, dates, rent index) and the payment history
@@ -227,10 +236,10 @@ Goal: no retyping of the 15 leases.
 - [ ] A review screen before confirming: what will be created, anything that couldn't be read
 - [ ] A snapshot before the import, so it can be undone in one tap
 - [ ] The import runs on the iPhone: the real files never leave it
-- [ ] Bring in at least the 2025 and 2026 payment and rent history (found in the review): leases already running are tracked from the current month with today's rent, so without it the 2026 tax summary and the 2025 charges reconciliation would be wrong for those leases
+- [ ] Bring in at least the 2025 and 2026 payment and rent history (found in the review): leases already running are tracked from the current month with today's rent, so without it the 2026 tax summary and the 2025 charges reconciliation would be wrong for those leases (when entering by hand, see the tip in [Known limitations](#known-limitations-current-version))
 
-### Milestone 6 · Version 1.5 · Bank import and semi-automatic follow-up
-Waiting for a sample export from CIC and from Crédit Agricole.
+### ⏸️ Milestone 6 · Bank import and semi-automatic follow-up
+Would need a sample export from CIC and from Crédit Agricole. The generic bank import already in the app still works.
 Goal: a monthly routine of about 5 minutes. Download the bank file, import it, then tap through receipts and reminders.
 - [ ] Adapt column and date detection to the CIC and Crédit Agricole exports (support OFX or Excel too, if CSV isn't offered)
 - [ ] Two accounts: rent can arrive at either bank, so both files are read the same way, and a transfer imported from one never doubles one from the other
@@ -242,11 +251,6 @@ Goal: a monthly routine of about 5 minutes. Download the bank file, import it, t
   - tenants still unpaid a set number of days after the due date (5 by default), each with "send reminder" ready
   - one tap per email (iOS rule); nothing is sent without your tap, so a wrong match never becomes a wrong receipt
   - each item marked as sent, so nothing is sent twice
-
-### Milestone 7 · Version 1.6 · Fixes from real use
-- [ ] Bugs and annoyances found on the iPhone
-- [ ] Search across tenants, properties and payments
-- [ ] Small wording and layout fixes
 
 ---
 
@@ -276,6 +280,7 @@ Goal: a monthly routine of about 5 minutes. Download the bank file, import it, t
 - **Encrypted manual backup file** (from the safety review): the file saved in iCloud Drive holds all tenant data unencrypted; it could use the same passphrase as the GitHub backup
 - **App lock with Face ID or a PIN** (from the safety review): anyone holding the unlocked phone can open the app
 - **An automatic copy before deleting a payment or an expense** (from the safety review): today only the daily copy covers them
+- **The CAF's share on rent calls** (from milestone 6, on hold): when the CAF pays part of the rent directly, show what is expected from the CAF and what the tenant still pays
 
 ## Known limitations (current version)
 
@@ -287,4 +292,5 @@ Goal: a monthly routine of about 5 minutes. Download the bank file, import it, t
 - The tax summary is a guide; check it against that year's form 2044 instructions
 - Diagnostic validity rules are simplified (older DPEs have special rules); expiry dates can be edited
 - Exporting to the Calendar again creates duplicate events unless the old ones are deleted first
-- The bank import is generic until it's tuned to CIC and Crédit Agricole (milestone 6)
+- The bank import is generic (tuning it to CIC and Crédit Agricole is on hold with milestone 6)
+- **Tip for leases entered by hand:** a lease that was already running is tracked from the month it's entered, with today's rent. For a complete tax summary of the year (and the charges reconciliation), set Edit › Start of tracking to January of that year, or earlier, and enter the payments since then (or the amount owed at that date)
