@@ -111,7 +111,7 @@ Smaller:
 - [x] "Received this month" no longer counts the deposit kept at a departure as money received
 
 ### ✅ Version 1.3.2 · Screen polish (6 Nov 2026)
-Asked for after using 1.3.1. iPhone check pending (see [Waiting](#waiting-on-you)).
+Code: [`de2c168`](https://github.com/hmaltawil/gestion-locative/commit/de2c168). Asked for after using 1.3.1. Checked on the iPhone (6 Nov 2026).
 - [x] Home: the three amounts at the top line up, even when a label takes two lines
 - [x] Home rents, deadlines, the monthly send and the month-by-month list: statuses, amounts and buttons line up from row to row, in French and in English
 - [x] A late rent shows "Late" with the amount below it, like the other rows
@@ -121,6 +121,8 @@ Asked for after using 1.3.1. iPhone check pending (see [Waiting](#waiting-on-you
 - [x] Lease form: "Charges type" uses the full width, so its text isn't cut off
 
 ### ✅ Version 1.3.3 · Fix from the 1.3.2 iPhone check (6 Nov 2026)
+Code: [`0955f62`](https://github.com/hmaltawil/gestion-locative/commit/0955f62). Checked on the iPhone (6 Nov 2026).
+
 - [x] Big amounts (the home tiles, the balance on a lease) use normal digit spacing: equal-width digits left gaps around every "1" (1 715,01 €). Lists keep equal-width digits so the amounts in a column line up
 
 ---
@@ -139,12 +141,12 @@ Asked for after using 1.3.1. iPhone check pending (see [Waiting](#waiting-on-you
   - [x] "New version available" bar after an update
   - [x] Deadlines › Add to Calendar (fixed in 1.1.2)
   - [x] Choose a bank CSV file (works with Revolut; your real bank's file comes with milestone 6)
-- ⏳ **Check versions 1.3.2 and 1.3.3 on the iPhone:** open the app, tap the "new version" bar, then try:
-  - [ ] Settings › About shows 1.3.3
-  - [ ] Home: "1 715,01 €" in the tiles is as evenly spaced as the other amounts
-  - [ ] Home: the three amounts at the top, and the rents' statuses, amounts and Record/✓ column, line up
-  - [ ] Settings › Signature › Add a signature: draw, save, and scrolling Settings never draws
-  - [ ] In dark mode, the text on blue buttons is easy to read
+- ✅ **Versions 1.3.2 and 1.3.3 checked on the iPhone** (6 Nov 2026)
+  - [x] Settings › About shows 1.3.3
+  - [x] Home: "1 715,01 €" in the tiles is as evenly spaced as the other amounts
+  - [x] Home: the three amounts at the top, and the rents' statuses, amounts and Record/✓ column, line up
+  - [x] Settings › Signature › Add a signature: draw, save, and scrolling Settings never draws
+  - [x] In dark mode, the text on blue buttons is easy to read
 - ✅ **Version 1.3.1 checked on the iPhone** (6 Nov 2026)
   - [x] Settings › About shows 1.3.1
   - [x] A rent call from a lease page and from the monthly send show the same total
