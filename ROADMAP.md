@@ -74,7 +74,8 @@ Code: [`66c21b7`](https://github.com/hmaltawil/gestion-locative/commit/66c21b7)
 
 - ✅ **GitHub backup set up** (5 Nov 2026) to the private repository `locatif-sauvegarde`. Passphrase on paper; revoke the token on GitHub if the phone is lost.
 - ⏳ **Optional, fewer permission prompts for Claude:** add `.claude/settings.json` to this repository yourself (Claude isn't allowed to change its own permissions).
-- ⏳ **Bank CSV sample** (account numbers removed) and the bank's name, to tune the import. This is milestone 4. It's exported from the bank's website, not the monthly PDF statement.
+- ⏳ **Gestion Locative Facile export files** (format only, names replaced), for milestone 4. On a computer: log in at immobilierloyer.com, tick Outils › Préférences › Réglages › Réglages avancés › "Export des données", then use **Exporter** on each page. Export before cancelling the subscription.
+- ⏳ **Bank CSV sample** (account numbers removed) and the bank's name, to tune the import. This is milestone 6. It's exported from the bank's website, not the monthly PDF statement.
 - ✅ **First check on the real iPhone:** everything works (5 Nov 2026)
   - [x] Add to Home Screen, then open from the icon
   - [x] Share menu: send a receipt by Mail
@@ -82,14 +83,31 @@ Code: [`66c21b7`](https://github.com/hmaltawil/gestion-locative/commit/66c21b7)
   - [x] Attach a photo with the camera
   - [x] "New version available" bar after an update
   - [x] Deadlines › Add to Calendar (fixed in 1.1.2)
-  - [x] Choose a bank CSV file (works with Revolut; your real bank's file comes with milestone 4)
+  - [x] Choose a bank CSV file (works with Revolut; your real bank's file comes with milestone 6)
 - ⏳ **Legal check, done once:** have the guarantor agreement, formal notice and deposit return letter reviewed, for example by your local ADIL.
 
 ---
 
 ## Next
 
-### 🔜 Milestone 4 · Version 1.3 · Bank import and semi-automatic follow-up
+### 🔜 Milestone 4 · Version 1.3 · Import from Gestion Locative Facile
+Waiting for the CSV export files (format only, with names replaced). Decided 6 Nov 2026.
+Goal: no retyping of the 15 leases.
+- [ ] Read the CSV files exported from immobilierloyer.com (Locataires, Contrats, Loyers et paiements, Charges et frais, Biens if offered)
+- [ ] Create properties, tenants, leases (rent, charges, deposit, dates, rent index) and the payment history
+- [ ] Import expenses and charges into the expense log
+- [ ] A review screen before confirming: what will be created, anything that couldn't be read
+- [ ] A snapshot before the import, so it can be undone in one tap
+- [ ] The import runs on the iPhone: the real files never leave it
+
+### Milestone 5 · Version 1.4 · Handover and support
+Decided 6 Nov 2026. You set everything up and check it, then hand it to the person who will use it, and can still help when something goes wrong.
+- [ ] **Handover:** the user's iPhone restores your finished setup from the GitHub backup, then becomes the only phone that saves to it
+- [ ] **Support copy (read-only):** open the latest GitHub backup on your own phone or computer to see exactly what the user sees, without ever saving over their data
+- [ ] **Anonymised support file:** exports the data with names, emails, phone numbers and addresses replaced, safe to share with Claude when investigating a problem
+- [ ] A short handover checklist (passphrase on paper, own token per phone, what to do if the phone is lost)
+
+### Milestone 6 · Version 1.5 · Bank import and semi-automatic follow-up
 Waiting for your bank's CSV sample.
 Goal: a monthly routine of about 5 minutes. Download the bank file, import it, then tap through receipts and reminders.
 - [ ] Adapt column and date detection to your bank's export (support OFX or Excel too, if your bank has no CSV)
@@ -102,7 +120,7 @@ Goal: a monthly routine of about 5 minutes. Download the bank file, import it, t
   - one tap per email (iOS rule); nothing is sent without your tap, so a wrong match never becomes a wrong receipt
   - each item marked as sent, so nothing is sent twice
 
-### Milestone 5 · Version 1.4 · Fixes from real use
+### Milestone 7 · Version 1.6 · Fixes from real use
 - [ ] Bugs and annoyances found on the iPhone
 - [ ] Search across tenants, properties and payments
 - [ ] Small wording and layout fixes
