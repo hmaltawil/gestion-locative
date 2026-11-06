@@ -32,6 +32,7 @@ export function emptyState() {
     documents: [],
     trash: [], // deleted documents: files kept 15 days so a snapshot can bring them back
     sent: {},
+    tax: {}, // per year, figures entered on the tax screen: { '2026': { line230 } }
   };
 }
 
@@ -141,6 +142,7 @@ export function normalize(raw) {
   for (const k of ['properties', 'leases', 'payments', 'expenses', 'reminders', 'documents', 'trash']) if (!Array.isArray(s[k])) s[k] = [];
   if (!s.irl || typeof s.irl !== 'object') s.irl = {};
   if (!s.sent || typeof s.sent !== 'object') s.sent = {};
+  if (!s.tax || typeof s.tax !== 'object' || Array.isArray(s.tax)) s.tax = {};
   for (const l of s.leases) {
     if (!Array.isArray(l.adjustments)) l.adjustments = [];
     if (!l.regularizations || typeof l.regularizations !== 'object') l.regularizations = {};

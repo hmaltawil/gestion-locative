@@ -147,3 +147,24 @@ test('indexation: done, waiting, blocked, first year', () => {
   assert.equal(indexationStatus(young, {}, IRL_BUILTIN, '2026-11-05').state, 'notYet');
   assert.equal(indexationStatus({ ...l, irl: null }, {}, IRL_BUILTIN, '2026-11-05'), null);
 });
+
+test('PDF text: letters the PDF fonts lack are simplified, French is kept', async () => {
+  const { pdfText } = await import('../js/util.js');
+  assert.equal(pdfText('Hélène Françoise Œuvre « 1 234,56 € » – l’été…'), 'Hélène Françoise Œuvre « 1 234,56 € » – l’été…');
+  assert.equal(pdfText('Łukasz Wójcik'), 'Lukasz Wójcik');
+  assert.equal(pdfText('Şahin Yılmaz'), 'Sahin Yilmaz');
+  assert.equal(pdfText('Nguyễn Thị'), 'Nguyên Thi');
+  assert.equal(pdfText('Ana Dragoș\u202f12'), 'Ana Dragos 12');
+  assert.equal(pdfText('e\u0301te\u0301'), 'été'); // decomposed accents
+  assert.equal(pdfText('Иван'), '????');
+  assert.equal(pdfText('a\nb'), 'a\nb');
+});
+
+test('month overview: the deposit applied at departure is not money received', async () => {
+  const { monthOverview } = await import('../js/calc.js');
+  const state = { leases: [], payments: [
+    { id: 'a', leaseId: 'X', date: '2026-11-03', amount: 50000, method: 'transfer' },
+    { id: 'b', leaseId: 'X', date: '2026-11-04', amount: 80000, method: 'deposit' },
+  ] };
+  assert.equal(monthOverview(state, '2026-11-10').received, 50000);
+});

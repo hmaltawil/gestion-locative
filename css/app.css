@@ -309,7 +309,7 @@ details summary { cursor: pointer; color: var(--accent); margin: 4px 0 10px; }
 .imp-main { flex: 1; min-width: 0; }
 .imp-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .imp-label { margin: 2px 0 8px; word-break: break-word; }
-.imp-main select { min-height: 38px; padding-top: 7px; padding-bottom: 7px; font-size: 15px; }
+.imp-main select { min-height: 38px; padding-top: 7px; padding-bottom: 7px; font-size: 16px; } /* 16px: no iPhone zoom */
 .sticky-cta {
   position: sticky; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 8px); z-index: 4;
   padding: 8px 0 0;

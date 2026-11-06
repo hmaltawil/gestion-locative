@@ -1,7 +1,7 @@
 // Bank statement import: reads a CSV export from any French bank, then
 // suggests which lease each incoming transfer belongs to.
 
-import { normalizeText, parseMoney, pad2 } from './util.js';
+import { daysBetween, daysInMonth, normalizeText, parseMoney, pad2 } from './util.js';
 
 // ---------- CSV ----------
 export function detectDelimiter(text) {
@@ -61,27 +61,38 @@ export function parseCsv(text, delimiter) {
 }
 
 // ---------- dates & amounts ----------
+function validDate(y, mo, d) {
+  if (mo < 1 || mo > 12 || d < 1 || d > daysInMonth(y, mo)) return null;
+  return `${y}-${pad2(mo)}-${pad2(d)}`;
+}
+
 export function parseBankDate(s) {
   s = String(s || '').trim();
   let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  if (m) return validDate(Number(m[1]), Number(m[2]), Number(m[3]));
   m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/.exec(s);
   if (m) {
     let y = Number(m[3]);
     if (y < 100) y += 2000;
-    const mo = Number(m[2]);
-    const d = Number(m[1]);
-    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
-    return `${y}-${pad2(mo)}-${pad2(d)}`;
+    return validDate(y, Number(m[2]), Number(m[1]));
   }
   return null;
 }
 
+// Accepts "650,00", "-650,00", "+650,00 EUR", "EUR 650,00", "650,00-",
+// "(650,00)" and the typographic minus sign.
 export function parseBankAmount(s) {
   if (s === undefined || s === null) return null;
-  const clean = String(s).trim().replace(/^\+/, '').replace(/\s*(EUR|€)$/i, '');
+  let clean = String(s).trim().replace(/[\u2212\u2012\u2013]/g, '-')
+    .replace(/^(EUR|€)\s*/i, '').replace(/\s*(EUR|€)$/i, '').trim();
+  let neg = false;
+  if (/^\(.*\)$/.test(clean)) { neg = true; clean = clean.slice(1, -1).trim(); }
+  if (/-$/.test(clean)) { neg = true; clean = clean.slice(0, -1).trim(); }
+  clean = clean.replace(/^\+/, '');
   if (!clean) return null;
-  return parseMoney(clean);
+  const v = parseMoney(clean);
+  if (v === null) return null;
+  return neg ? -Math.abs(v) : v;
 }
 
 // ---------- columns ----------
@@ -204,6 +215,23 @@ export function suggestLease(tx, candidates, known) {
   }
   if (!best || best.score < 30) return { leaseId: '', score: best ? best.score : 0, reasons: [] };
   return best;
+}
+
+// Payments typed in by hand that an incoming bank line probably repeats: same
+// amount, at most `days` days apart, and the same lease when one is suggested.
+// Each payment explains one line at most. Returns { fp: payment }.
+export function manualDuplicates(txs, payments, suggested = {}, days = 7) {
+  const manual = payments.filter((p) => !p.bankRef && p.method !== 'deposit');
+  const used = new Set();
+  const out = {};
+  for (const tx of txs) {
+    if (tx.amount <= 0) continue;
+    const leaseId = suggested[tx.fp];
+    const hit = manual.find((p) => !used.has(p.id) && p.amount === tx.amount
+      && (!leaseId || p.leaseId === leaseId) && Math.abs(daysBetween(p.date, tx.date)) <= days);
+    if (hit) { used.add(hit.id); out[tx.fp] = hit; }
+  }
+  return out;
 }
 
 // Labels already used for a lease in earlier imports.

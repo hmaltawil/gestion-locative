@@ -11,7 +11,7 @@ What's done and what's planned: see [ROADMAP.md](ROADMAP.md). Notes for develope
 - **Properties and leases:** tenants and co-tenants, guarantor, deposit, payment day, energy rating (DPE), tenant insurance date.
 - **Rent tracking:** a month-by-month view with paid, partial, unpaid and late statuses. Payments always clear the oldest debt first. First and last months are pro-rated. Already-running leases can start with an opening balance. One-off charges or credits can be added to a lease.
 - **Monthly send:** all receipts or rent calls for a month. Each tenant's PDF goes out in one tap (their email is copied first), or everything can be saved as one PDF for printing.
-- **Bank statement import:** reads the CSV export from any bank (columns are detected and can be corrected), matches incoming transfers to leases by tenant name, amount and labels seen before, and skips anything already imported.
+- **Bank statement import:** reads the CSV export from any bank (columns are detected and can be corrected), matches incoming transfers to leases by tenant name, amount and labels seen before, skips anything already imported, and flags payments you already typed in by hand.
 
 **PDF documents (in French)**
 - Rent call, receipt, partial payment receipt, reminder, formal notice.
@@ -21,14 +21,14 @@ What's done and what's planned: see [ROADMAP.md](ROADMAP.md). Notes for develope
 **Yearly tasks**
 - **Rent revision (IRL):** follows article 17-1 of the law of 6 July 1989. Properties rated F or G are blocked. "Update from INSEE" fetches new index values.
 - **Charges reconciliation:** actual recoverable charges against the advances billed, split by days of occupancy. It drafts the letter, adds the balance to the tenant's account and can adjust the monthly advance.
-- **Form 2044 summary:** rents counted when received (excluding charges), costs on lines 221 to 250 including the €20 flat fee per property, the result, and a micro-foncier comparison. Exports a PDF and a CSV file for an accountant.
+- **Form 2044 summary:** rents counted when received (excluding charges), costs on lines 221 to 250 including the €20 flat fee per property and the line 230 adjustment for building charges, the result, and a micro-foncier comparison. Exports a PDF and a CSV file for an accountant.
 
 **Deadlines and records**
 - **Deadlines:** rent revisions, tenant insurance, diagnostic reports, lease term and notice dates, deposit return, charges reconciliation and your own reminders. Shown on the home screen and exportable to the iPhone Calendar as a .ics file.
 - **Diagnostic reports:** per property, with expiry dates filled in automatically.
 - **Documents:** photos and PDFs attached to properties, leases or expenses. Photos are resized, and everything is included in the backup.
 - **Handover and support:** each device connected to the GitHub backup is either the **main phone** (saves) or a **support copy** (read-only, for looking at the user's data). There's also an anonymised support file and a handover checklist in Settings.
-- **Tenant departure:** deposit return with deductions, unpaid rent, up to 20% held back for buildings with shared accounts, the 1- or 2-month legal deadline and the late penalty.
+- **Tenant departure:** deposit return with deductions, unpaid rent, up to 20% held back for buildings with shared accounts, the 1- or 2-month legal deadline and the late penalty (added to the amount to return). Once the deposit is marked as returned, the tenant's account ends at zero or at what they still owe.
 
 ## Where the data lives
 
@@ -36,7 +36,7 @@ All data, including attached documents, is stored on the device itself (IndexedD
 
 Three layers of protection:
 1. **Automatic copies on the phone** (Settings › Automatic copies): one a day for 14 days, plus one before every import, restore, deletion or erase. They undo mistakes, but they're lost with the phone.
-2. **Automatic backup to GitHub** (Settings › Automatic backup): after each change, an encrypted copy goes to a **private** repository of your own. It's encrypted on the phone with AES-256-GCM and a key derived from your passphrase (PBKDF2-SHA-256, 310,000 iterations), so GitHub only stores unreadable files, and every version is kept. The access token and passphrase stay on the phone and are never included in backups. **Keep the passphrase on paper:** without it the backups can't be read.
+2. **Automatic backup to GitHub** (Settings › Automatic backup): after each change, an encrypted copy goes to a **private** repository of your own. It's encrypted on the phone with AES-256-GCM and a key derived from your passphrase (PBKDF2-SHA-256, 310,000 iterations), so GitHub only stores unreadable files, and every version is kept. The access token and passphrase stay on the phone and are never included in backups. **Keep the passphrase on paper:** without it the backups can't be read. If another phone has saved to the same repository in the meantime, this phone stops saving and asks you what to do, so one phone never silently erases the other's changes.
 3. **Manual backup file** (Settings › Manual backup › Back up › Save to Files › iCloud Drive). The app reminds you if neither this nor the GitHub backup has run for 7 days.
 
 - **Deleting the home-screen icon deletes the data on the phone.** Restore from GitHub or from a backup file.
@@ -83,6 +83,8 @@ npm run e2e       # browser tests (Playwright), with the server running
 - `js/store.js`: on-device storage, backup and restore.
 - `js/i18n.js`: the French and English interface text.
 - `js/app.js`: the screens.
+
+PDF documents use the fonts built into jsPDF, which cover French and Western European letters. Other letters in names are simplified (Łukasz → Lukasz).
 
 ## Legal note
 

@@ -208,3 +208,146 @@ test('bank CSV: Revolut export (booked date, pending and declined lines skipped)
   const txs = toTransactions(rows, map);
   assert.deepEqual(txs.map((t) => [t.date, t.amount]), [['2026-10-02', -2345], ['2026-10-05', 85000]]);
 });
+
+// ---------- 1.3.1: fixes from the code review ----------
+
+test('deposit return: the account ends at what the statement says, even with an overpayment', async () => {
+  const { depositSettlement } = await import('../js/charges.js');
+  const l = { id: 'D', startDate: '2026-01-01', endDate: '2026-03-31', trackFrom: '2026-01', rents: [{ from: '2026-01', rent: 50000, charges: 0 }], deposit: 30000, adjustments: [] };
+  const pays = [
+    { id: 'p1', leaseId: 'D', date: '2026-01-01', amount: 50000 },
+    { id: 'p2', leaseId: 'D', date: '2026-02-01', amount: 50000 },
+    { id: 'p3', leaseId: 'D', date: '2026-03-01', amount: 80000 }, // 300 € too much
+  ];
+  const settle = (deductions, retention = 0) => {
+    const dep = { keysDate: '2026-03-31', inventoryMatches: false, deductions, retention, returnedOn: '2026-04-10' };
+    const st = departureStatement(l, ledger(l, pays, '2026-04-10'), dep, '2026-04-10');
+    const { adjustments, payment } = depositSettlement(st, deductions, dep.keysDate, '2026-04-10');
+    const after = ledger({ ...l, adjustments: adjustments.map((a, i) => ({ id: `a${i}`, ...a })) }, [...pays, { id: 'dep', leaseId: 'D', ...payment }], '2026-04-10');
+    return { st, after };
+  };
+  // overpayment + deposit cover the deductions: 100 € back, nothing owed afterwards
+  let { st, after } = settle([{ label: 'Réparations', amount: 50000 }]);
+  assert.equal(st.toReturn, 10000);
+  assert.equal(after.balance, 0);
+  // deductions above everything: the tenant owes exactly what the statement says
+  ({ st, after } = settle([{ label: 'Réparations', amount: 70000 }]));
+  assert.equal(st.stillOwed, 10000);
+  assert.equal(after.balance, 10000);
+  // nothing to deduct: deposit and overpayment go back, account at zero
+  ({ st, after } = settle([]));
+  assert.equal(st.toReturn, 60000);
+  assert.equal(after.balance, 0);
+  // part held back for the building accounts stays out of the account
+  ({ st, after } = settle([], 6000));
+  assert.equal(st.toReturn, 54000);
+  assert.equal(after.balance, 0);
+});
+
+test('deposit: the late penalty is added to the amount to return, and only when something is returned', () => {
+  const l = { ...lease, endDate: '2025-03-15' };
+  const led = ledger(l, [
+    { id: 'p1', leaseId: 'L1', date: '2025-01-05', amount: 85000 },
+    { id: 'p2', leaseId: 'L1', date: '2025-02-05', amount: 85000 },
+  ], '2025-06-20');
+  const late = departureStatement(l, led, { keysDate: '2025-03-15', inventoryMatches: false }, '2025-06-20');
+  assert.equal(late.penalty, 2 * 8000);
+  assert.equal(late.toReturn, late.refund + late.penalty);
+  const nothingLeft = departureStatement(l, led, { keysDate: '2025-03-15', inventoryMatches: false, deductions: [{ amount: 200000 }] }, '2025-06-20');
+  assert.equal(nothingLeft.refund, 0);
+  assert.equal(nothingLeft.penalty, 0);
+});
+
+test('tax: a charges refund does not reduce the rent counted', () => {
+  const l = { id: 'T', startDate: '2025-01-01', trackFrom: '2025-01', rents: [{ from: '2025-01', rent: 60000, charges: 10000 }],
+    adjustments: [{ id: 'a', date: '2025-06-01', amount: -20000, kind: 'regularization', regYear: 2024 }] };
+  const pays = [];
+  for (let m = 1; m <= 12; m++) pays.push({ id: `x${m}`, leaseId: 'T', date: `2025-${String(m).padStart(2, '0')}-01`, amount: m === 6 ? 50000 : 70000 });
+  const r = rentReceived(l, pays, 2025, '2026-03-01');
+  assert.equal(r.rent, 12 * 60000);
+  assert.equal(r.charges, 12 * 10000 - 20000);
+  // any other credit (a gesture) is still a reduction of what was received
+  const gesture = { ...l, adjustments: [{ id: 'g', date: '2025-06-01', amount: -20000, kind: 'other' }] };
+  const g = rentReceived(gesture, pays, 2025, '2026-03-01');
+  assert.equal(g.rent + g.charges, 11 * 70000 + 50000);
+});
+
+test('tax: line 230 is subtracted from the total costs', () => {
+  const state = {
+    properties: [{ id: 'P1' }], leases: [], payments: [],
+    expenses: [{ id: 'e1', propertyId: 'P1', date: '2026-03-01', amount: 120000, category: 'condo' }],
+    tax: { 2026: { line230: 30000 } },
+  };
+  const s = taxSummary(state, 2026, '2026-12-31');
+  assert.equal(s.lines['229'], 120000);
+  assert.equal(s.lines['230'], 30000);
+  assert.equal(s.expenses, 120000 - 30000);
+  assert.equal(taxSummary({ ...state, tax: {} }, 2026, '2026-12-31').expenses, 120000);
+});
+
+test('rent call: one balance for the lease page and the monthly send', async () => {
+  const { rentCallBalance } = await import('../js/calc.js');
+  const l = { ...lease, openingBalance: 15000, trackFrom: '2025-01', adjustments: [
+    { id: 'r', kind: 'regularization', label: 'Régularisation des charges 2024', amount: 9000, date: '2025-03-05' },
+    { id: 'later', kind: 'other', label: 'Plus tard', amount: 5000, date: '2025-06-01' },
+  ] };
+  // January paid, February half paid; call for March on 20 February
+  const pays = [{ id: 'p1', leaseId: 'L1', date: '2025-01-05', amount: 15000 + 85000 }, { id: 'p2', leaseId: 'L1', date: '2025-02-05', amount: 40000 }];
+  const c = rentCallBalance(l, pays, '2025-03', '2025-02-20');
+  assert.equal(c.due.total, 85000);
+  assert.equal(c.previous, 45000); // rest of February
+  assert.deepEqual(c.extras.map((x) => x.amount), [9000]); // due with the March rent; June not yet
+  assert.equal(c.total, 85000 + 45000 + 9000);
+  // the opening balance counts when it is still owed
+  const c2 = rentCallBalance(l, [], '2025-01', '2025-01-02');
+  assert.equal(c2.previous, 15000);
+  // part already paid for the month itself, and an advance
+  const c3 = rentCallBalance(lease, [{ id: 'q', leaseId: 'L1', date: '2025-01-02', amount: 30000 }], '2025-01', '2025-01-03');
+  assert.equal(c3.paidTowards, 30000);
+  assert.equal(c3.total, 55000);
+  const c4 = rentCallBalance(lease, [{ id: 'q', leaseId: 'L1', date: '2025-01-02', amount: 100000 }], '2025-02', '2025-01-20');
+  assert.equal(c4.credit, 15000);
+  assert.equal(c4.total, 70000);
+  assert.equal(rentCallBalance(l, pays, '2025-03', '2025-02-20', false).total, 85000);
+});
+
+test('bank: more amount formats, impossible dates refused', () => {
+  assert.equal(parseBankAmount('650,00-'), -65000);
+  assert.equal(parseBankAmount('−650,00'), -65000);
+  assert.equal(parseBankAmount('EUR 650,00'), 65000);
+  assert.equal(parseBankAmount('€ -1 234,50'), -123450);
+  assert.equal(parseBankAmount('(45,20)'), -4520);
+  assert.equal(parseBankAmount('-'), null);
+  assert.equal(parseBankDate('31/02/2026'), null);
+  assert.equal(parseBankDate('29/02/2028'), '2028-02-29');
+  assert.equal(parseBankDate('2026-02-30'), null);
+});
+
+test('bank: a payment typed in by hand is spotted as a likely duplicate', async () => {
+  const { manualDuplicates } = await import('../js/bank.js');
+  const txs = [
+    { fp: 'a', date: '2026-11-04', amount: 65000, label: 'VIR DUPONT' },
+    { fp: 'b', date: '2026-11-05', amount: 65000, label: 'VIR DUPONT' },
+    { fp: 'c', date: '2026-11-20', amount: 70000, label: 'VIR MARTIN' },
+  ];
+  const payments = [
+    { id: 'm1', leaseId: 'L1', date: '2026-11-02', amount: 65000 }, // typed by hand
+    { id: 'm2', leaseId: 'L2', date: '2026-11-01', amount: 70000 }, // too far from line c
+    { id: 'i1', leaseId: 'L1', date: '2026-10-04', amount: 65000, bankRef: 'old' }, // imported before: not "by hand"
+  ];
+  const d = manualDuplicates(txs, payments, { a: 'L1', b: 'L1', c: 'L2' });
+  assert.deepEqual(Object.keys(d), ['a']); // one manual payment explains one line only
+  assert.equal(d.a.id, 'm1');
+  assert.deepEqual(Object.keys(manualDuplicates(txs, payments, { a: 'L9' })), ['b']); // another lease suggested for a
+});
+
+test('charges reconciliation: leases of the same property at the same time', async () => {
+  const { overlappingLeases } = await import('../js/charges.js');
+  const a = { id: 'A', propertyId: 'P', startDate: '2024-01-01', endDate: '2025-06-30' };
+  const b = { id: 'B', propertyId: 'P', startDate: '2025-07-01' }; // follows A: fine
+  const c = { id: 'C', propertyId: 'P', startDate: '2025-05-01' }; // overlaps A in May-June
+  const d = { id: 'D', propertyId: 'Q', startDate: '2025-01-01' };
+  assert.deepEqual(overlappingLeases([a, b, d], a, 2025), []);
+  assert.deepEqual(overlappingLeases([a, b, c, d], a, 2025).map((x) => x.id), ['C']);
+  assert.deepEqual(overlappingLeases([a, c], a, 2026), []); // A has ended by 2026
+});

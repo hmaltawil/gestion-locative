@@ -67,12 +67,19 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await shot('01-home');
 
   step('bank import');
+  // Sophie's November transfer was already typed in by hand: the import must flag it, unticked
+  await nav('#/leases'); await page.click('text=Sophie Bernard');
+  await page.click('.card [data-action=pay]');
+  await page.fill('#sheet [name=amount]', '560,50');
+  await page.fill('#sheet [name=date]', '2026-11-05');
+  await page.click('#sheet button[type=submit]');
   await nav('#/import');
   await chooser(() => page.click('[data-action=importPick]'), __dirname + '/bank.csv');
   await page.waitForSelector('.imp-list');
   await shot('02-import');
   const checked = await page.$$eval('.imp-list input[type=checkbox]', (els) => els.map((e) => e.checked));
-  console.log('import ticks', JSON.stringify(checked));
+  console.log('import ticks', JSON.stringify(checked), '| flagged as typed by hand:', await page.locator('.imp-row .note.warn').count());
+  if (checked[1] !== false || await page.locator('.imp-row .note.warn').count() !== 1) throw new Error('manual payment not flagged');
   await page.click('[data-action=importApply]');
   await page.waitForTimeout(300);
   // second import of same file: all duplicates
@@ -136,6 +143,13 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await page.waitForTimeout(300);
   await shot('07-departure-done');
   console.log('after return:', (await page.textContent('.balance')).replace(/\s+/g, ' ').trim(), '| inputs disabled:', await page.$eval('fieldset', (f) => f.disabled));
+  // the tenant's account must show exactly what the statement says
+  const stated = (await page.textContent('.balance')).replace(/\s+/g, ' ').trim();
+  await nav(await page.evaluate(() => location.hash.replace('#/departure/', '#/lease/')));
+  const account = (await page.textContent('.card .balance')).replace(/\s+/g, ' ').trim();
+  console.log('tenant account after the deposit return:', account);
+  const amount = (stated.match(/[\d ]+,\d\d/) || [''])[0].trim();
+  if (/still owes/i.test(stated) ? !account.includes(amount) : !/up to date/i.test(account)) throw new Error(`account (${account}) does not match the statement (${stated})`);
 
   step('property: diagnostics + documents');
   await nav('#/properties'); await page.click('text=Appartement Gambetta');

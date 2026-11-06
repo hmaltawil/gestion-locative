@@ -9,9 +9,10 @@ One place to see what's done, what's waiting, and what comes next. Update it at 
 1. **One milestone at a time.** Each milestone is a version number (1.2, 1.3…) and a short list of features.
 2. **Before starting,** agree on the list. Anything new goes into [Ideas](#ideas-backlog), not into the current milestone.
 3. **A milestone is done when:**
-   - the calculation tests pass (`npm test`), and the new screens have been run in a phone-sized browser;
-   - `VERSION` in `sw.js` and `APP_VERSION` in `js/app.js` are bumped;
+   - the calculation tests pass (`npm test`) and the browser tests pass (`npm run serve`, then `npm run e2e`);
+   - `VERSION` in `sw.js`, `APP_VERSION` in `js/app.js` and `version` in `package.json` are bumped;
    - the README and this file are updated, with the milestone's commit linked below;
+   - it is pushed to `main` and the live `sw.js` shows the new version;
    - it has been checked on the real iPhone (see [Waiting](#waiting-on-you)).
 4. **Bugs found on the iPhone** go at the top of the next milestone.
 
@@ -57,6 +58,8 @@ Code: [`66c21b7`](https://github.com/hmaltawil/gestion-locative/commit/66c21b7)
 - [x] Bank import: Revolut-style files use the booked ("Completed") date and skip pending or declined lines
 
 ### ✅ Milestone 3 · Version 1.2 · Data safety (5 Nov 2026)
+Code: [`c4061e3`](https://github.com/hmaltawil/gestion-locative/commit/c4061e3)
+
 - [x] Automatic copies on the phone: one a day for 14 days, plus one before each bank import, restore, deletion or erase; restore any of them from Settings
 - [x] Deleted documents keep their file 15 days, so restoring a copy brings them back
 - [x] Automatic backup to a private GitHub repository, a few seconds after each change and when leaving the app
@@ -69,12 +72,43 @@ Code: [`66c21b7`](https://github.com/hmaltawil/gestion-locative/commit/66c21b7)
 - [x] One-tap manual backup (the file is prepared in the background)
 
 ### ✅ Milestone 4 · Version 1.3 · Handover and support (6 Nov 2026)
+Code: [`9f92fda`](https://github.com/hmaltawil/gestion-locative/commit/9f92fda)
+
 Built before the import because the import was waiting for the export files.
 - [x] Each connected device has a role: **main phone** (saves backups) or **support copy** (read-only)
 - [x] Support copy: restores the user's latest GitHub backup, shows a bar on every screen, never uploads, "Refresh from GitHub" gets the newest version
 - [x] Anonymised support file: names, contact details, addresses, notes and bank labels replaced; amounts and dates kept; restorable in a test browser (with a warning)
 - [x] Handover checklist in Settings › Handover and support
 - [x] Browser tests saved in `tests/e2e/` (see CLAUDE.md)
+
+### ✅ Version 1.3.1 · Fixes from the code review (6 Nov 2026)
+iPhone check pending (see [Waiting](#waiting-on-you)).
+
+Wrong numbers:
+- [x] Deposit return: a tenant who had paid too much no longer ends up owing money afterwards; the account now ends at exactly what the statement says
+- [x] Tax summary: a refund from the charges reconciliation no longer lowers the rent counted on line 211
+- [x] Rent call: the lease page and the monthly send give the same total, including unpaid one-off charges, the opening balance, any part already paid and any advance
+- [x] Deposit returned late: the 10% penalty is added to the amount to return, to the letter and to "Mark as returned" (and is not due when nothing is left to return)
+
+Backup and data safety:
+- [x] A phone that is behind no longer overwrites a backup saved by another phone: it stops, says so on the home screen, and offers "Restore from GitHub" or "Save this phone's data anyway"
+- [x] Bank import: a payment already typed in by hand (same amount, within 7 days) is flagged and left unticked
+- [x] "Restore from GitHub": all versions can be reached ("Show older versions"), not only the latest 30
+
+Privacy:
+- [x] Anonymised support file: notes on rent changes and departure deductions are removed too
+
+Legal and tax:
+- [x] Guarantor agreement: the guarantor's handwritten statement gives the amount in figures and in words and, for a joint guarantee, the acknowledgment required by article 2297 of the Civil Code; it stays on one page with the signatures (to confirm with the ADIL, see [Waiting](#waiting-on-you))
+- [x] Form 2044 line 230 can be entered on the tax screen, and is subtracted from the costs
+- [x] Warning when the deposit is more than one month's rent excluding charges
+
+Smaller:
+- [x] PDFs: names with letters the PDF fonts lack are simplified instead of garbled (Łukasz → Lukasz, Nguyễn → Nguyên)
+- [x] Charges reconciliation: warning when another lease of the same property runs at the same time
+- [x] Bank files: amounts like "650,00-", "EUR 650,00" or "(45,20)" are read; impossible dates such as 31/02 are refused
+- [x] No zoom on the iPhone when choosing a lease in the bank import
+- [x] "Received this month" no longer counts the deposit kept at a departure as money received
 
 ---
 
@@ -92,7 +126,15 @@ Built before the import because the import was waiting for the export files.
   - [x] "New version available" bar after an update
   - [x] Deadlines › Add to Calendar (fixed in 1.1.2)
   - [x] Choose a bank CSV file (works with Revolut; your real bank's file comes with milestone 6)
-- ⏳ **Legal check, done once:** have the guarantor agreement, formal notice and deposit return letter reviewed, for example by your local ADIL.
+- ⏳ **Check version 1.3.1 on the iPhone:** open the app, tap the "new version" bar, then try:
+  - [ ] Settings › About shows 1.3.1
+  - [ ] A rent call from a lease page and from the monthly send show the same total
+  - [ ] Tax summary › line 230 can be saved
+  - [ ] A guarantor agreement PDF: the statement to copy by hand and the signatures are on the same page
+- ⏳ **Legal check, done once:** have the guarantor agreement, formal notice and deposit return letter reviewed, for example by your local ADIL. Questions to ask:
+  - Guarantor agreement: since 2022 (article 2297 of the Civil Code), is the handwritten statement now complete (amount in figures and words; for a joint guarantee, the acknowledgment that the landlord need not pursue the tenant first)?
+  - Rent revision claimed late: which IRL value applies, the latest published on the anniversary date or the latest published on the day of the request? Today the app uses the latest available on the day you tap, so with an anniversary just before INSEE publishes, a few days' difference changes the index used. Once answered, the app can follow the rule.
+  - Deposit returned late: the app adds the penalty (10% of the rent per started month) and notes that it is not due if the tenant gave no new address. Correct?
 
 ---
 
@@ -107,6 +149,7 @@ Goal: no retyping of the 15 leases.
 - [ ] A review screen before confirming: what will be created, anything that couldn't be read
 - [ ] A snapshot before the import, so it can be undone in one tap
 - [ ] The import runs on the iPhone: the real files never leave it
+- [ ] Bring in at least the 2025 and 2026 payment and rent history (found in the review): leases already running are tracked from the current month with today's rent, so without it the 2026 tax summary and the 2025 charges reconciliation would be wrong for those leases
 
 ### Milestone 6 · Version 1.5 · Bank import and semi-automatic follow-up
 Waiting for your bank's CSV sample.
@@ -148,12 +191,17 @@ Goal: a monthly routine of about 5 minutes. Download the bank file, import it, t
 - **Rental deficit carried forward** from one year to the next on form 2044
 - **Archive each year's tax summary** once filed
 - **Furnished rentals (LMNP)**, if one ever becomes furnished: different lease and tax regime
+- **Full font for PDFs**, so names in any alphabet print exactly (today letters outside French and Western European ones are simplified: Łukasz → Lukasz). Cost: about 1 MB more in the app and in every PDF sent
+- **Return of the 20% held back** for a building with shared accounts: a reminder once the building's accounts are approved, and the final statement
+- **Charges split between several tenants of one property** (by share or surface), if a property ever holds more than one letting at the same time; today the app warns
 
 ## Known limitations (current version)
 
-- Data is used on one iPhone. With the GitHub backup on, it's also stored off the phone, but it's not a sync: if two phones were connected to the same repository, the last one to save would replace the other's data
+- Data is used on one iPhone. With the GitHub backup on, it's also stored off the phone, but it's not a sync: if two phones are connected as main phone, the one that is behind stops saving and asks what to do
 - If the GitHub passphrase is lost, the GitHub backups can't be read; the manual backup file isn't encrypted and still works
-- Not yet tested on a real iPhone (see [Waiting](#waiting-on-you))
+- Names with letters outside French and Western European alphabets are simplified in PDFs (Łukasz → Lukasz)
+- Line 230 of form 2044 is entered by hand, from the managing agent's yearly statement
+- The charges reconciliation assumes one tenant at a time per property (a warning shows otherwise)
 - The tax summary is a guide; check it against that year's form 2044 instructions
 - Diagnostic validity rules are simplified (older DPEs have special rules); expiry dates can be edited
 - Exporting to the Calendar again creates duplicate events unless the old ones are deleted first

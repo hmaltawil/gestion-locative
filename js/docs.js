@@ -1,7 +1,7 @@
 // PDF documents (always in French, as they are legal documents).
 // Uses jsPDF, loaded from vendor/jspdf.umd.min.js.
 
-import { amountInFrench, fmtDate, fmtMoney, fmtPeriod, slug, todayStr } from './util.js';
+import { amountInFrench, fmtDate, fmtMoney, fmtPeriod, pdfText, slug, todayStr } from './util.js';
 import { fmtIrlKey } from './irl.js';
 
 const M = 20; // page margin (mm)
@@ -10,6 +10,12 @@ const W = 210 - 2 * M; // usable width
 function newDoc() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  // Every piece of text goes through pdfText, so names with letters the PDF
+  // fonts don't have are simplified instead of printed as garbage.
+  const text = doc.text.bind(doc);
+  doc.text = (s, ...rest) => text(Array.isArray(s) ? s.map(pdfText) : pdfText(s), ...rest);
+  const split = doc.splitTextToSize.bind(doc);
+  doc.splitTextToSize = (s, ...rest) => split(pdfText(s), ...rest);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(20, 20, 20);
   return doc;
@@ -170,7 +176,9 @@ function ctxFor(state, lease, extra = {}) {
 }
 
 // ---------- Avis d'échéance (rent call) ----------
-export function rentCallPdf(state, lease, due, previousBalance, into) {
+// call: from rentCallBalance() in calc.js.
+export function rentCallPdf(state, lease, call, into) {
+  const { due } = call;
   const ctx = ctxFor(state, lease);
   const doc = into || newDoc();
   let y = header(doc, ctx);
@@ -181,10 +189,12 @@ export function rentCallPdf(state, lease, due, previousBalance, into) {
     [chargesLabel(lease), fmtMoney(due.charges)],
     [`Total de l'échéance`, fmtMoney(due.total), { bold: true, line: true }],
   ];
-  if (previousBalance > 0) {
-    rows.push(['Solde antérieur restant dû', fmtMoney(previousBalance)]);
-    rows.push(['Total à payer', fmtMoney(due.total + previousBalance), { bold: true, line: true }]);
-  }
+  const more = [];
+  if (call.paidTowards > 0) more.push(['Déjà réglé pour cette période', `- ${fmtMoney(call.paidTowards)}`]);
+  if (call.previous > 0) more.push(['Solde antérieur restant dû', fmtMoney(call.previous)]);
+  for (const x of call.extras || []) more.push([`${x.label || 'Autre somme due'} (échéance du ${fmtDate(x.date)})`, fmtMoney(x.amount)]);
+  if (call.credit > 0) more.push(['Avance déjà versée', `- ${fmtMoney(call.credit)}`]);
+  if (more.length) rows.push(...more, ['Total à payer', fmtMoney(call.total), { bold: true, line: true }]);
   y = table(doc, y + 2, rows);
   if (due.prorata) y = para(doc, y, `Montant calculé au prorata : ${due.prorata.days} jours sur ${due.prorata.dim}.`, 10);
   y = para(doc, y, `Merci d'effectuer votre règlement au plus tard le ${fmtDate(due.dueDate)}.`);
@@ -338,12 +348,14 @@ export function departurePdf(state, lease, st, dep) {
   if (st.arrears > 0) rows.push(['Loyers et charges restant dus', `- ${fmtMoney(st.arrears)}`]);
   for (const d of dep.deductions || []) if (d.amount) rows.push([d.label || 'Retenue', `- ${fmtMoney(d.amount)}`]);
   if (st.retention > 0) rows.push(["Provision conservée dans l'attente de l'arrêté des comptes de l'immeuble", `- ${fmtMoney(st.retention)}`]);
+  if (st.penalty > 0) rows.push([`Majoration pour restitution tardive (${st.lateMonths} mois commencé${st.lateMonths > 1 ? 's' : ''} de retard)`, `+ ${fmtMoney(st.penalty)}`]);
   if (st.stillOwed > 0) rows.push(['Reste dû par le locataire', fmtMoney(st.stillOwed), { bold: true, line: true }]);
   else rows.push(['Montant restitué', fmtMoney(st.toReturn), { bold: true, line: true }]);
   y = table(doc, y + 2, rows);
   let text = dep.inventoryMatches !== false
     ? "L'état des lieux de sortie étant conforme à l'état des lieux d'entrée, le dépôt de garantie est restitué dans un délai d'un mois à compter de la remise des clés."
     : "Les retenues ci-dessus correspondent aux différences constatées entre l'état des lieux d'entrée et l'état des lieux de sortie ; les justificatifs (devis, factures) sont joints. Le dépôt de garantie est restitué dans un délai de deux mois à compter de la remise des clés.";
+  if (st.penalty > 0) text += "\n\nLe dépôt étant restitué après le délai légal, le montant restitué comprend la majoration de 10 % du loyer mensuel hors charges par mois de retard commencé prévue par l'article 22.";
   if (st.retention > 0) text += "\n\nLe solde de la provision conservée vous sera restitué dans le mois qui suit l'approbation définitive des comptes de l'immeuble.";
   if (st.stillOwed > 0) text += `\n\nLe dépôt de garantie ne couvrant pas l'intégralité des sommes dues, vous restez redevable de ${fmtMoney(st.stillOwed)}, que je vous remercie de régler dans les meilleurs délais.`;
   if (dep.newAddress) text += `\n\nAdresse communiquée pour la restitution : ${dep.newAddress}.`;
@@ -406,17 +418,34 @@ export function guarantorPdf(state, lease, g, cur) {
     : 'Le bail ne prévoit pas de révision annuelle du loyer.';
   y = para(doc, y, `Je soussigné(e) ${g.name || '[nom de la caution]'}${g.address ? `, demeurant ${g.address}` : ''}, déclare me porter caution ${kind} de ${tenants} pour le paiement des loyers, des charges, des réparations locatives et, le cas échéant, des indemnités d'occupation, frais et accessoires dus au titre du bail désigné ci-dessus, conclu avec ${L.name || '[nom du bailleur]'}.\n\n${revision}\n\nMon engagement est consenti pour ${duration}, dans la limite de la somme de ${fmtMoney(g.maxAmount)} (${amountInFrench(g.maxAmount)}).${g.solidaire ? " En me portant caution solidaire, je renonce au bénéfice de discussion : le bailleur pourra me demander le paiement des sommes dues sans poursuivre d'abord le locataire." : ''}\n\nJe reconnais avoir une parfaite connaissance de la nature et de l'étendue de mon engagement et avoir reçu un exemplaire du contrat de location.`, 10.5);
   y = para(doc, y, "Reproduction de l'avant-dernier alinéa de l'article 22-1 de la loi du 6 juillet 1989 : « Lorsque le cautionnement d'obligations résultant d'un contrat de location conclu en application du présent titre ne comporte aucune indication de durée ou lorsque la durée du cautionnement est stipulée indéterminée, la caution peut le résilier unilatéralement. La résiliation prend effet au terme du contrat de location, qu'il s'agisse du contrat initial ou d'un contrat reconduit ou renouvelé, au cours duquel le bailleur reçoit notification de la résiliation. »", 9.5);
-  if (y > 200) { doc.addPage(); y = M + 6; }
+  // Article 2297 of the Civil Code: the amount in words and in figures, and,
+  // for a joint guarantee, the guarantor's acknowledgment in the statement itself.
+  const renounce = g.solidaire
+    ? " Je reconnais ne pouvoir exiger du bailleur qu'il poursuive d'abord le locataire ni, en cas de pluralité de cautions, qu'il divise ses poursuites entre les cautions."
+    : '';
+  const mention = `« En me portant caution ${kind} de ${tenants}, dans la limite de la somme de ${fmtMoney(g.maxAmount)} (${amountInFrench(g.maxAmount)}) couvrant le paiement des loyers, charges et accessoires et pour ${g.years ? `une durée de ${g.years} an${g.years > 1 ? 's' : ''}` : 'une durée indéterminée'}, je m'engage à payer au bailleur ce que lui doit le locataire en cas de défaillance de celui-ci.${renounce} »`;
+  // Handwriting takes more room than print: leave enough lines.
+  const writeLines = g.solidaire ? 8 : 6;
+  // Keep the statement, the lines to write on and the signatures on one page.
+  doc.setFontSize(9.5);
+  const needed = 5 + doc.splitTextToSize(mention, W).length * 4.1 + 4 + writeLines * 7 + 3 + 34;
+  if (y + needed > 287) {
+    // The first page is initialled by both parties.
+    doc.setFontSize(9);
+    doc.text('Paraphe de la caution :', M, 285);
+    doc.text('Paraphe du bailleur :', 130, 285);
+    doc.addPage();
+    y = M + 6;
+  }
   doc.setFontSize(10.5);
   doc.setFont('helvetica', 'bold');
   doc.text('Mention à écrire par la caution elle-même :', M, y);
   doc.setFont('helvetica', 'normal');
   y += 5;
-  y = para(doc, y, `« En me portant caution ${kind} de ${tenants}, dans la limite de la somme de ${amountInFrench(g.maxAmount)} couvrant le paiement des loyers, charges et accessoires et pour ${g.years ? `une durée de ${g.years} an${g.years > 1 ? 's' : ''}` : 'une durée indéterminée'}, je m'engage à payer au bailleur ce que lui doit le locataire en cas de défaillance de celui-ci. »`, 9.5);
+  y = para(doc, y, mention, 9.5);
   doc.setDrawColor(170, 170, 170);
-  for (let i = 0; i < 5; i++) { doc.line(M, y + 2 + i * 7, 210 - M, y + 2 + i * 7); }
-  y += 38;
-  if (y > 262) { doc.addPage(); y = M + 6; }
+  for (let i = 0; i < writeLines; i++) { doc.line(M, y + 2 + i * 7, 210 - M, y + 2 + i * 7); }
+  y += writeLines * 7 + 3;
   doc.setFontSize(10.5);
   doc.text(`Fait à ${L.city || '……………'}, le ……………, en deux exemplaires.`, M, y);
   doc.text('La caution', M, y + 10);
@@ -444,6 +473,7 @@ export function taxSummaryPdf(state, s, labels) {
     ['211 - Loyers bruts encaissés (hors charges)', fmtMoney(s.lines['211'] || 0), { bold: true }],
   ];
   for (const k of ['221', '222', '223', '224', '227', '229']) if (s.lines[k]) rows.push([`${k} - ${labels[k]}`, fmtMoney(s.lines[k])]);
+  if (s.lines['230']) rows.push([`230 - ${labels['230']} (à déduire)`, `- ${fmtMoney(s.lines['230'])}`]);
   rows.push(['240 - Total des frais et charges', fmtMoney(s.expenses), { bold: true, line: true }]);
   if (s.lines['250']) rows.push([`250 - ${labels['250']}`, fmtMoney(s.lines['250'])]);
   rows.push([s.result >= 0 ? 'Résultat foncier (bénéfice)' : 'Résultat foncier (déficit)', fmtMoney(s.result), { bold: true, line: true }]);
@@ -451,7 +481,7 @@ export function taxSummaryPdf(state, s, labels) {
   let text = `Pour comparaison, micro-foncier : ${s.microEligible ? `revenu imposable de ${fmtMoney(s.microTaxable)} (abattement de 30 %).` : 'non applicable, les loyers bruts dépassant 15 000 €.'}`;
   if (s.notDeductible) text += `\nDépenses non déductibles enregistrées (charges récupérables, TEOM, autres) : ${fmtMoney(s.notDeductible)}.`;
   y = para(doc, y, text, 10);
-  footnote(doc, "Document indicatif établi à partir des données saisies. Les loyers sont comptés à leur date d'encaissement, hors charges. Vérifiez chaque ligne avec la notice 2044 de l'année (régularisation des charges de copropriété ligne 230, déficit foncier, régimes particuliers).");
+  footnote(doc, "Document indicatif établi à partir des données saisies. Les loyers sont comptés à leur date d'encaissement, hors charges. Vérifiez chaque ligne avec la notice 2044 de l'année (ligne 230 d'après le décompte du syndic, déficit foncier, régimes particuliers).");
   return { doc, name: `Revenus-fonciers-${s.year}.pdf` };
 }
 

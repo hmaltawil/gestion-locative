@@ -25,8 +25,21 @@ export function anonymize(src) {
     });
     if (l.guarantor) l.guarantor = `Garant ${i + 1}`;
     l.notes = '';
-    if (l.departure) l.departure = { ...l.departure, newAddress: '' };
-    (l.adjustments || []).forEach((a) => { if (a.kind === 'other') a.label = 'Autre somme'; });
+    // Free text typed on rent changes, one-off items and departure deductions.
+    (l.rents || []).forEach((r) => { if (r.note && r.reason !== 'indexation') r.note = ''; });
+    if (l.departure) {
+      l.departure = {
+        ...l.departure,
+        newAddress: '',
+        deductions: (l.departure.deductions || []).map((d, k) => ({ ...d, label: `Retenue ${k + 1}` })),
+      };
+    }
+    (l.adjustments || []).forEach((a) => {
+      if (a.kind === 'regularization') a.label = `Régularisation des charges ${a.regYear || ''}`.trim();
+      else if (a.kind === 'deduction') a.label = 'Retenue sur dépôt';
+      else if (a.kind === 'refund') a.label = 'Restitution du dépôt de garantie';
+      else a.label = 'Autre somme';
+    });
   });
   s.payments.forEach((p) => {
     p.note = '';

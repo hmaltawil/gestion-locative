@@ -102,7 +102,9 @@ export function ledger(lease, allPayments, today) {
       debts.push(debt);
       adjustments.push(debt);
     } else if (amount < 0) {
-      pool.push({ date: a.date, left: -amount, real: false });
+      // A refund from the charges reconciliation gives back charges, not rent;
+      // the tax summary needs to know (see tax.js).
+      pool.push({ date: a.date, left: -amount, real: false, charges: a.kind === 'regularization' });
       adjustments.push({ ...a, kind: 'adjustment', adjKind: a.kind, total: amount, paid: 0, credit: true });
     }
   }
@@ -124,7 +126,7 @@ export function ledger(lease, allPayments, today) {
       const take = Math.min(need, pay.left);
       debt.paid += take;
       pay.left -= take;
-      debt.allocations.push({ date: pay.date, amount: take, real: pay.real });
+      debt.allocations.push({ date: pay.date, amount: take, real: pay.real, ...(pay.charges ? { charges: true } : {}) });
       if (debt.paid >= debt.total) { debt.paidDate = pay.date; i++; }
     }
   }
@@ -221,10 +223,35 @@ export function monthOverview(state, today) {
     overdue += led.overdue;
     if (isActive(lease, today) || led.owed > 0) items.push({ lease, ledger: led, row });
   }
+  // The deposit applied to the account when a tenant leaves is not new money.
   const received = state.payments
-    .filter((x) => periodOf(x.date) === p)
+    .filter((x) => periodOf(x.date) === p && x.method !== 'deposit')
     .reduce((s, x) => s + (Number(x.amount) || 0), 0);
   return { period: p, due, received, overdue, items };
+}
+
+// What a rent call for `period` asks for: that month's rent and charges, less
+// anything already paid towards it, plus earlier unpaid months and the opening
+// balance, plus one-off charges due by the same date, less any advance.
+// The lease page and the monthly send both use this, so they always agree.
+export function rentCallBalance(lease, payments, period, today, withBalance = true) {
+  const due = { ...dueForPeriod(lease, period), dueDate: dueDateFor(lease, period) };
+  if (!withBalance) return { due, paidTowards: 0, previous: 0, extras: [], credit: 0, total: due.total };
+  const led = ledger(lease, payments, today);
+  const row = led.rows.find((r) => r.period === period);
+  const paidTowards = row ? row.paid : 0;
+  let previous = 0;
+  const extras = [];
+  for (const d of led.debts) {
+    const rest = d.total - d.paid;
+    if (rest <= 0) continue;
+    if (d.kind === 'period') { if (d.period < period) previous += rest; }
+    else if (d.kind === 'opening') previous += rest;
+    else if (d.dueDate <= due.dueDate) extras.push({ label: d.label || '', date: d.dueDate, amount: rest });
+  }
+  const credit = led.credit;
+  const total = Math.max(0, due.total - paidTowards + previous + extras.reduce((s, x) => s + x.amount, 0) - credit);
+  return { due, paidTowards, previous, extras, credit, total };
 }
 
 export function periodRange(fromP, toP) {

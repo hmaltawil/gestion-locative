@@ -72,7 +72,10 @@ function fakeGitHub({ isPrivate = true, token = 'good' } = {}) {
     if (p === '/repos/me/backup') return json(200, { private: isPrivate, default_branch: 'main' });
     if (p === '/repos/me/backup/commits') {
       const path = u.searchParams.get('path');
-      return json(200, commits.filter((c) => c.path === path).reverse().map((c) => ({ sha: c.sha, commit: { committer: { date: c.date }, message: c.message } })));
+      const per = Number(u.searchParams.get('per_page') || 30);
+      const page = Number(u.searchParams.get('page') || 1);
+      const list = commits.filter((c) => c.path === path).reverse().slice((page - 1) * per, page * per);
+      return json(200, list.map((c) => ({ sha: c.sha, commit: { committer: { date: c.date }, message: c.message } })));
     }
     const m = /^\/repos\/me\/backup\/contents\/(.+)$/.exec(p);
     if (m) {
@@ -154,4 +157,53 @@ test('anonymised support file keeps numbers, removes personal details', async ()
   assert.equal(out.documents[0].name, 'document-1.pdf');
   assert.equal(out.anonymised, true);
   assert.equal(st.leases[0].tenants[0].name, 'Jean Martin'); // original untouched
+});
+
+test('sync: a backup saved by another phone is never replaced silently', async () => {
+  const gh = fakeGitHub();
+  const cfg = { repo: 'me/backup', token: 'good', fetch: gh.fetch };
+  const opts = (tag) => ({ refuseConflicts: true, tag });
+  const a1 = await putFile(cfg, DATA_PATH, 'A1', 'Sauvegarde [phoneA]', null, opts('[phoneA]'));
+  const b1 = await putFile(cfg, DATA_PATH, 'B1', 'Sauvegarde [phoneB]', a1, opts('[phoneB]'));
+  // phone A still has its old sha: refused
+  await assert.rejects(putFile(cfg, DATA_PATH, 'A2', 'Sauvegarde [phoneA]', a1, opts('[phoneA]')), (e) => e instanceof SyncError && e.code === 'conflict');
+  assert.equal(await readFile(cfg, DATA_PATH), 'B1');
+  // a new phone without a sha cannot replace an existing backup either
+  await assert.rejects(putFile(cfg, DATA_PATH, 'C1', 'Sauvegarde [phoneC]', null, opts('[phoneC]')), (e) => e.code === 'conflict');
+  // phone B's answer got lost: its own last save may be replaced
+  const b2 = await putFile(cfg, DATA_PATH, 'B2', 'Sauvegarde [phoneB]', a1, opts('[phoneB]'));
+  assert.notEqual(b2, b1);
+  assert.equal(await readFile(cfg, DATA_PATH), 'B2');
+});
+
+test('sync: versions come one page at a time', async () => {
+  const gh = fakeGitHub();
+  const cfg = { repo: 'me/backup', token: 'good', fetch: gh.fetch };
+  let sha = null;
+  for (let i = 1; i <= 7; i++) sha = await putFile(cfg, DATA_PATH, `v${i}`, `Sauvegarde ${i}`, sha);
+  const p1 = await listVersions(cfg, DATA_PATH, { page: 1, perPage: 5 });
+  const p2 = await listVersions(cfg, DATA_PATH, { page: 2, perPage: 5 });
+  assert.deepEqual(p1.map((v) => v.message), ['Sauvegarde 7', 'Sauvegarde 6', 'Sauvegarde 5', 'Sauvegarde 4', 'Sauvegarde 3']);
+  assert.deepEqual(p2.map((v) => v.message), ['Sauvegarde 2', 'Sauvegarde 1']);
+});
+
+test('anonymised support file: free text on rent changes, one-off items and departures is removed', async () => {
+  const { anonymize } = await import('../js/support.js');
+  const st = {
+    settings: { landlord: {} }, properties: [], payments: [], expenses: [], reminders: [], documents: [],
+    leases: [{
+      id: 'L1', tenants: [{ name: 'Jeanne Dupont' }],
+      rents: [{ from: '2025-01', rent: 1, charges: 0, reason: 'manual', note: 'Accord avec Mme Dupont' }, { from: '2026-01', rent: 2, charges: 0, reason: 'indexation', note: 'IRL 2024-Q4 → 2025-Q4' }],
+      adjustments: [
+        { kind: 'deduction', label: 'Porte cassée par Jeanne Dupont', amount: 100 },
+        { kind: 'regularization', regYear: 2025, label: 'Régularisation des charges 2025', amount: 50 },
+      ],
+      departure: { keysDate: '2026-01-01', newAddress: '9 rue Z', deductions: [{ label: 'Porte cassée par Jeanne Dupont', amount: 100 }] },
+    }],
+  };
+  const out = anonymize(st);
+  assert.ok(!JSON.stringify(out).includes('Dupont'));
+  assert.equal(out.leases[0].rents[1].note, 'IRL 2024-Q4 → 2025-Q4');
+  assert.equal(out.leases[0].adjustments[1].label, 'Régularisation des charges 2025');
+  assert.equal(out.leases[0].departure.deductions[0].amount, 100);
 });

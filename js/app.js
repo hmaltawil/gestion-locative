@@ -3,7 +3,7 @@ import {
   periodOf, todayStr, uid, addDays,
 } from './util.js';
 import {
-  currentRent, dueForPeriod, dueDateFor, indexationStatus, isActive, ledger, monthOverview, rentAt, sortedRents,
+  currentRent, dueDateFor, indexationStatus, isActive, ledger, monthOverview, rentAt, rentCallBalance, sortedRents,
 } from './calc.js';
 import { fetchInseeIrl, fmtIrlKey, irlKey, irlTable, latestIrlKey } from './irl.js';
 import {
@@ -13,20 +13,20 @@ import {
 import { counts as snapCounts, expiredTrash, needsDaily, toPrune } from './snapshots.js';
 import { decryptBytes, decryptJson, encryptBytes, encryptJson, newKeySession } from './crypto.js';
 import {
-  DATA_PATH, SyncError, checkRepo, docPath, getSha, listVersions, parseRepo, putFile as ghPut, readFile,
+  DATA_PATH, SyncError, VERSIONS_PER_PAGE, checkRepo, docPath, getSha, listVersions, parseRepo, putFile as ghPut, readFile,
 } from './sync.js';
 import {
   deliver, departurePdf, depositReceiptPdf, formalNoticePdf, guarantorPdf, indexationPdf, newPdf, receiptPdf, regularizationPdf,
   reminderPdf, rentCallPdf, rentCertificatePdf, shareFile, taxSummaryPdf,
 } from './docs.js';
-import { guessMapping, knownLabels, parseCsv, suggestLease, toTransactions } from './bank.js';
-import { departureStatement, recoverableExpenses, regularization } from './charges.js';
+import { guessMapping, knownLabels, manualDuplicates, parseCsv, suggestLease, toTransactions } from './bank.js';
+import { departureStatement, depositSettlement, overlappingLeases, recoverableExpenses, regularization } from './charges.js';
 import { LINE_2044, taxSummary, yearCsv } from './tax.js';
 import { buildIcs, deadlines, defaultExpiry } from './deadlines.js';
 import { anonymize } from './support.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.3.1';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -566,7 +566,7 @@ function viewLeaseForm(r) {
           ${field(t('chargesType'), select('chargesType', [['provision', t('chargesProvision')], ['forfait', t('chargesForfait')]], l.chargesType))}
           ${field(t('paymentDay'), input('paymentDay', l.paymentDay || 1, 'type="number" min="1" max="28" inputmode="numeric"'))}
         </div>
-        ${moneyField(t('deposit'), 'deposit', l.deposit)}
+        ${moneyField(t('deposit'), 'deposit', l.deposit, t('depositHint'))}
       </section>
       <section class="card">
         <h3>${esc(t('revisionSection'))}</h3>
@@ -602,7 +602,8 @@ export const EXPENSE_CATEGORIES = ['management', 'insurance', 'works', 'property
 const LINE_LABELS_FR = {
   221: "Frais d'administration et de gestion", 222: 'Autres frais de gestion (20 € par local)', 223: "Primes d'assurance",
   224: "Dépenses de réparation, d'entretien et d'amélioration", 227: 'Taxes foncières (hors TEOM)',
-  229: 'Provisions pour charges de copropriété', 250: "Intérêts et frais d'emprunt",
+  229: 'Provisions pour charges de copropriété', 230: "Régularisation des provisions de copropriété déduites l'année précédente",
+  250: "Intérêts et frais d'emprunt",
 };
 
 function viewExpenses(r) {
@@ -847,25 +848,8 @@ function insuranceSheet(leaseId) {
 }
 
 // ---------- monthly batch ----------
-function rentCallData(l, period, withBalance = true) {
-  const due = { ...dueForPeriod(l, period), dueDate: dueDateFor(l, period) };
-  let previous = 0;
-  if (withBalance) {
-    const led = ledger(l, state.payments, today());
-    for (const d of led.debts) {
-      const before = d.kind === 'period' ? d.period < period : d.dueDate < `${period}-01`;
-      if (before) previous += d.total - d.paid;
-    }
-    previous -= led.credit;
-  }
-  return { due, previous: Math.max(0, previous) };
-}
-
 function batchDoc(type, l, period, into) {
-  if (type === 'rentCall') {
-    const { due, previous } = rentCallData(l, period);
-    return rentCallPdf(state, l, due, previous, into);
-  }
+  if (type === 'rentCall') return rentCallPdf(state, l, rentCallBalance(l, state.payments, period, today()), into);
   const row = ledger(l, state.payments, today()).rows.find((x) => x.period === period);
   return row && row.paid > 0 ? receiptPdf(state, l, row, into) : null;
 }
@@ -948,11 +932,22 @@ function rebuildImport() {
   const known = knownLabels(state.payments);
   const cands = importCandidates();
   const done = new Set(state.payments.map((p) => p.bankRef).filter(Boolean));
+  const fresh = [];
   for (const tx of s.txs) {
     if (tx.amount <= 0 || s.choices[tx.fp]) continue;
     const dup = done.has(tx.fp);
     const sug = suggestLease(tx, cands, known);
     s.choices[tx.fp] = { leaseId: sug.leaseId, on: !dup && sug.score >= 50, dup, score: sug.score };
+    if (!dup) fresh.push(tx);
+  }
+  // A payment already typed in by hand: suggest the line, but leave it unticked.
+  const suggested = Object.fromEntries(fresh.map((tx) => [tx.fp, s.choices[tx.fp].leaseId]));
+  const manual = manualDuplicates(fresh, state.payments, suggested);
+  for (const [fp, p] of Object.entries(manual)) {
+    const c = s.choices[fp];
+    c.maybe = { date: p.date, leaseId: p.leaseId };
+    c.on = false;
+    if (!c.leaseId) c.leaseId = p.leaseId;
   }
 }
 
@@ -986,6 +981,7 @@ function viewImport() {
         <div class="imp-top"><strong>${fmtMoney(tx.amount)}</strong><span class="muted small">${fmtDate(tx.date)}</span></div>
         <div class="muted small imp-label">${esc(tx.label)}</div>
         ${c.dup ? `<span class="pill muted">${esc(t('alreadyImported'))}</span>` : select('lease', leaseOpts, c.leaseId || '', `data-change="impLease" data-fp="${esc(tx.fp)}"`)}
+        ${c.maybe ? `<p class="note warn small">${esc(t('importMaybeDup', { date: fmtDate(c.maybe.date), who: tenantsLabel(leaseOf(c.maybe.leaseId) || {}) }))}</p>` : ''}
       </div>
     </li>`;
   }).join('');
@@ -1050,6 +1046,7 @@ function viewRegularize(r) {
     body: `
       <p class="subtitle">${esc(tenantsLabel(l))} · ${esc(propName(prop(l.propertyId)))}</p>
       ${l.chargesType === 'forfait' ? `<p class="note warn">${esc(t('regForfait'))}</p>` : ''}
+      ${overlappingLeases(state.leases, l, year).length ? `<p class="note warn">${esc(t('regOverlap', { year }))}</p>` : ''}
       ${done ? `<div class="note ok">${esc(t('regDone', { date: fmtDate(done.date), amount: fmtMoney(done.balance) }))} <button class="link danger" data-action="regUndo" data-lease="${l.id}" data-year="${year}">${esc(t('undo'))}</button></div>` : ''}
       <div class="filters one">${select('year', years, year, `data-change="regYear" data-lease="${l.id}"`)}</div>
       <section class="card">
@@ -1151,10 +1148,11 @@ function viewDeparture(r) {
           <dt>${esc(t('arrears'))}</dt><dd>- ${fmtMoney(st.arrears)}</dd>
           <dt>${esc(t('deductions'))}</dt><dd>- ${fmtMoney(st.deductions)}</dd>
           ${st.retention ? `<dt>${esc(t('retentionShort'))}</dt><dd>- ${fmtMoney(st.retention)}</dd>` : ''}
+          ${st.penalty ? `<dt>${esc(t('penaltyShort'))}</dt><dd>+ ${fmtMoney(st.penalty)}</dd>` : ''}
         </dl>
         <div class="spacer"></div>
         ${st.stillOwed > 0 ? `<div class="balance bad"><span>${esc(t('tenantStillOwes'))}</span><strong>${fmtMoney(st.stillOwed)}</strong></div>` : `<div class="balance ok"><span>${esc(t('toReturn'))}</span><strong>${fmtMoney(st.toReturn)}</strong></div>`}
-        <p class="${!returned && td > st.deadline ? 'note warn' : 'hint'}">${esc(t('depositDeadline', { date: fmtDate(st.deadline), months: ses.inventoryMatches ? 1 : 2 }))}${!returned && st.lateMonths ? ' ' + esc(t('latePenalty', { n: st.lateMonths, amount: fmtMoney(st.penalty) })) : ''}</p>
+        <p class="${!returned && td > st.deadline ? 'note warn' : 'hint'}">${esc(t('depositDeadline', { date: fmtDate(st.deadline), months: ses.inventoryMatches ? 1 : 2 }))}${!returned && st.penalty ? ' ' + esc(t('latePenalty', { n: st.lateMonths, amount: fmtMoney(st.penalty) })) : ''}</p>
         ${ses.keysDate > td ? `<p class="hint">${esc(t('futureDepartureHint'))}</p>` : ''}
         <div class="btn-row">
           <button class="btn secondary" data-action="depPdf" data-lease="${l.id}">${icon('doc')} ${esc(t('statementPdf'))}</button>
@@ -1169,6 +1167,7 @@ function depReturnedSheet(leaseId) {
   const { st } = departureData(l);
   openSheet(t('markReturned'), `<form class="form" data-form="depReturned" data-lease="${l.id}">
     <p class="hint">${esc(t('markReturnedHint'))}</p>
+    ${st.penalty ? `<p class="note warn">${esc(t('returnIncludesPenalty', { amount: fmtMoney(st.penalty) }))}</p>` : ''}
     <div class="grid2">
       ${field(t('date'), input('date', today(), 'type="date" required'))}
       ${moneyField(t('amountReturned'), 'amount', st.toReturn)}
@@ -1198,6 +1197,7 @@ function viewTax(r) {
         <ul class="list plain compact">
           ${lineRow('211', true)}
           ${['221', '222', '223', '224', '227', '229'].map((k) => lineRow(k)).join('')}
+          ${s.lines['230'] ? `<li><span>230 · ${esc(L('230'))}</span><span>- ${fmtMoney(s.lines['230'])}</span></li>` : ''}
           <li><span><strong>240 · ${esc(L('240'))}</strong></span><span><strong>${fmtMoney(s.expenses)}</strong></span></li>
           ${lineRow('250')}
           <li class="total"><span><strong>${esc(s.result >= 0 ? t('resultProfit') : t('resultDeficit'))}</strong></span><span><strong>${fmtMoney(s.result)}</strong></span></li>
@@ -1206,6 +1206,12 @@ function viewTax(r) {
         ${s.notDeductible ? `<p class="hint">${esc(t('notDeductible', { amount: fmtMoney(s.notDeductible) }))}</p>` : ''}
         <p class="hint">${esc(t('taxHint'))}</p>
       </section>
+      <form class="card form" data-form="taxLine230" data-year="${year}">
+        <h3>${esc(t('line230Title'))}</h3>
+        <p class="hint">${esc(t('line230Hint', { prev: year - 1 }))}</p>
+        ${moneyField(t('line230Amount'), 'line230', ((state.tax || {})[year] || {}).line230 || 0)}
+        <button class="btn secondary block" type="submit">${esc(t('save'))}</button>
+      </form>
       <section class="card flush"><h3 class="pad">${esc(t('byProperty'))}</h3><ul class="list">${s.properties.map((p) => `<li class="row">
         <div class="row-main"><strong>${esc(propName(p.property))}</strong><span class="muted small">${esc(t('chargesReceived', { amount: fmtMoney(p.charges) }))}</span></div>
         <span class="amount">${fmtMoney(p.rent)}</span></li>`).join('')}</ul></section>
@@ -1493,6 +1499,10 @@ async function runSync() {
       meta.dirty = false;
       return;
     }
+    // Each phone signs its saves, so it can tell its own from another phone's.
+    if (!g.device) { g.device = uid().replace(/-/g, '').slice(0, 8); await saveSecrets(secrets); }
+    const tag = `[${g.device}]`;
+    if (meta.forceNext) meta.dataSha = await getSha(cfg, DATA_PATH);
     const session = await newKeySession(g.passphrase);
     const stamp = fmtDateTime(meta.lastAttempt);
     const uploaded = new Set(meta.uploadedDocs || []);
@@ -1507,9 +1517,11 @@ async function runSync() {
       await saveSecrets(secrets);
     }
     const env = await encryptJson({ app: 'gestion-locative', exportedAt: new Date().toISOString(), state }, g.passphrase, session);
-    meta.dataSha = await ghPut(cfg, DATA_PATH, env, `Sauvegarde automatique ${stamp}`, meta.dataSha);
+    // Never replace a backup that another phone saved in the meantime.
+    meta.dataSha = await ghPut(cfg, DATA_PATH, env, `Sauvegarde automatique ${stamp} ${tag}`, meta.dataSha, { refuseConflicts: true, tag });
     meta.lastOk = new Date().toISOString();
     meta.lastError = null;
+    meta.forceNext = false;
     meta.dirty = commitCount !== startCount;
     if (meta.dirty) syncAgain = true;
   } catch (e) {
@@ -1529,7 +1541,10 @@ function syncStatusHtml(running) {
   if (isViewer()) return `<p>${esc(m.lastRefresh ? t('supportStatus', { date: fmtDateTime(m.lastRefresh) }) : t('supportNever'))}</p>`;
   let h = `<p>${esc(m.lastOk ? t('syncLastOk', { date: fmtDateTime(m.lastOk) }) : t('syncNever'))}</p>`;
   if (running) h += `<p class="muted small">${esc(t('syncRunning'))}</p>`;
-  else if (m.lastError) h += `<p class="note warn">${esc(t('syncFailed', { reason: t('syncErr_' + m.lastError) }))}</p>`;
+  else if (m.lastError === 'conflict') {
+    h += `<p class="note warn">${esc(t('syncConflict'))}</p>
+      <button class="btn small secondary" data-action="syncForce">${esc(t('syncForce'))}</button>`;
+  } else if (m.lastError) h += `<p class="note warn">${esc(t('syncFailed', { reason: t('syncErr_' + m.lastError) }))}</p>`;
   return h;
 }
 
@@ -1543,7 +1558,9 @@ function safetyBanners() {
   if (!g) return '';
   const m = syncMeta();
   let out = '';
-  if (!isViewer() && m.lastError && (!m.lastOk || m.lastOk.slice(0, 10) < addDays(today(), -2))) {
+  if (!isViewer() && m.lastError === 'conflict') {
+    out += `<a class="banner warn" href="#/settings">${esc(t('syncConflictBanner'))}</a>`;
+  } else if (!isViewer() && m.lastError && (!m.lastOk || m.lastOk.slice(0, 10) < addDays(today(), -2))) {
     out += `<a class="banner warn" href="#/settings">${esc(t('syncFailingBanner', { reason: t('syncErr_' + m.lastError) }))}</a>`;
   }
   if (g.tokenExpires && g.tokenExpires <= addDays(today(), 14)) {
@@ -1605,23 +1622,37 @@ function snapshotsCard() {
   </section>`;
 }
 
-async function ghRestoreSheet(intro) {
+// The list of GitHub versions, a page at a time ("Show older versions").
+let versionList = { intro: null, items: [], page: 0, more: false };
+
+async function ghRestoreSheet(intro, more = false) {
   const g = gh();
   if (!g) return;
-  openSheet(t('ghVersions'), `<p class="muted">${esc(t('ghLoading'))}</p>`);
-  let versions = [];
+  if (!more) {
+    versionList = { intro, items: [], page: 0, more: false };
+    openSheet(t('ghVersions'), `<p class="muted">${esc(t('ghLoading'))}</p>`);
+  }
   try {
-    versions = await listVersions({ repo: g.repo, token: g.token });
+    const page = versionList.page + 1;
+    const items = await listVersions({ repo: g.repo, token: g.token }, DATA_PATH, { page });
+    versionList.items.push(...items);
+    versionList.page = page;
+    versionList.more = items.length === VERSIONS_PER_PAGE;
   } catch (e) {
     closeSheet();
     toast(t('syncErr_' + ((e && e.code) || 'unknown')), 'error');
     return;
   }
-  openSheet(t('ghVersions'), `${intro ? `<p class="note">${esc(intro)}</p>` : ''}
+  const versions = versionList.items;
+  const box = document.querySelector('#sheet .sheet');
+  const keep = more && box ? box.scrollTop : 0;
+  openSheet(t('ghVersions'), `${versionList.intro ? `<p class="note">${esc(versionList.intro)}</p>` : ''}
     <p class="hint">${esc(t('ghVersionsHint'))}</p>
     ${versions.length ? `<ul class="list plain">${versions.map((v, i) => `<li class="row tight">
       <div class="row-main"><strong>${esc(fmtDateTime(v.date))}</strong><span class="muted small">${i === 0 ? esc(t('ghLatest')) : ''}</span></div>
-      <button class="btn small${i === 0 ? '' : ' secondary'}" data-action="ghRestoreVersion" data-sha="${esc(v.sha)}">${esc(t('snapRestore'))}</button></li>`).join('')}</ul>` : `<p class="muted">${esc(t('ghNoVersions'))}</p>`}`);
+      <button class="btn small${i === 0 ? '' : ' secondary'}" data-action="ghRestoreVersion" data-sha="${esc(v.sha)}">${esc(t('snapRestore'))}</button></li>`).join('')}</ul>` : `<p class="muted">${esc(t('ghNoVersions'))}</p>`}
+    ${versionList.more ? `<button class="btn block secondary" data-action="ghOlder">${esc(t('ghOlder'))}</button>` : ''}`);
+  if (keep) document.querySelector('#sheet .sheet').scrollTop = keep;
 }
 
 async function ghRestoreVersion(sha) {
@@ -2071,6 +2102,10 @@ const forms = {
       insuranceUntil: f.get('insuranceUntil') || null,
       notes: f.get('notes').trim(),
     };
+    // Unfurnished lease: the deposit is at most one month's rent excluding charges.
+    const rentHC = existing ? currentRent(existing, today()).rent : parseMoney(f.get('rent'));
+    if (rentHC > 0 && data.deposit > rentHC && data.deposit !== (existing && existing.deposit)
+      && !confirm(t('depositAboveCap', { max: fmtMoney(rentHC) }))) return;
     if (!existing) {
       const rent = parseMoney(f.get('rent'));
       if (rent === null) { toast(t('rentMissing'), 'error'); return; }
@@ -2107,16 +2142,8 @@ const forms = {
   },
   rentCall: (f, form) => {
     const l = leaseOf(form.dataset.lease);
-    const period = f.get('period');
-    const due = { ...dueForPeriod(l, period), dueDate: dueDateFor(l, period) };
-    let previous = 0;
-    if (f.get('withBalance')) {
-      const led = ledger(l, state.payments, today());
-      for (const r of led.rows) if (r.period < period) previous += r.total - r.paid;
-      if (led.opening) previous += led.opening.total - led.opening.paid;
-      previous -= led.credit;
-    }
-    makePdf(() => rentCallPdf(state, l, due, Math.max(0, previous)));
+    const call = rentCallBalance(l, state.payments, f.get('period'), today(), !!f.get('withBalance'));
+    makePdf(() => rentCallPdf(state, l, call));
   },
   changeRent: (f, form) => {
     const from = f.get('from');
@@ -2165,6 +2192,12 @@ const forms = {
     });
     toast(t('saved'));
     location.hash = `#/expenses?year=${data.date.slice(0, 4)}`;
+  },
+  taxLine230: (f, form) => {
+    const year = form.dataset.year;
+    const amount = parseMoney(f.get('line230')) || 0;
+    commit((s) => { s.tax = { ...(s.tax || {}), [year]: { ...((s.tax || {})[year] || {}), line230: Math.max(0, amount) } }; });
+    toast(t('saved'));
   },
   landlord: (f) => {
     commit((s) => {
@@ -2366,7 +2399,7 @@ Object.assign(actions, {
   taxPdf: (d) => {
     const s = taxSummary(state, Number(d.year), today());
     const labels = {};
-    for (const k of ['221', '222', '223', '224', '227', '229', '250']) labels[k] = LINE_LABELS_FR[k];
+    for (const k of ['221', '222', '223', '224', '227', '229', '230', '250']) labels[k] = LINE_LABELS_FR[k];
     makePdf(() => taxSummaryPdf(state, s, labels));
   },
   taxCsv: (d) => {
@@ -2460,18 +2493,16 @@ Object.assign(forms, {
     const date = f.get('date') || today();
     const amount = parseMoney(f.get('amount')) || 0;
     closeSheet();
+    // The penalty depends on the day the money actually went back.
+    const final = departureStatement({ ...l, endDate: ses.keysDate }, led, { ...ses, returnedOn: date }, today());
+    const { adjustments, payment } = depositSettlement(final, ses.deductions, ses.keysDate, date);
     commit((s) => {
       const x = s.leases.find((y) => y.id === l.id);
-      x.adjustments = x.adjustments || [];
-      for (const dd of ses.deductions) {
-        if (dd.amount > 0) x.adjustments.push({ id: uid(), date: ses.keysDate, label: dd.label || 'Retenue sur dépôt', amount: dd.amount, kind: 'deduction' });
-      }
-      if (st.credit > 0) x.adjustments.push({ id: uid(), date, label: 'Remboursement du trop-perçu', amount: st.credit, kind: 'refund' });
-      const covered = Math.min(st.deposit - st.retention, st.arrears + st.deductions);
-      if (covered > 0) s.payments.push({ id: uid(), leaseId: x.id, amount: covered, date, method: 'deposit', note: 'Imputé sur le dépôt de garantie' });
-      x.departure = { ...(x.departure || {}), ...ses, returnedOn: date, returnedAmount: amount, statement: { ...st, returnedOn: date } };
+      x.adjustments = [...(x.adjustments || []), ...adjustments.map((a) => ({ id: uid(), ...a }))];
+      if (payment) s.payments.push({ id: uid(), leaseId: x.id, ...payment });
+      x.departure = { ...(x.departure || {}), ...ses, returnedOn: date, returnedAmount: amount, statement: { ...final, returnedOn: date } };
     });
-    void led;
+    void st;
     toast(t('saved'));
   },
   docAdd: async (f, form) => {
@@ -2607,6 +2638,13 @@ Object.assign(actions, {
     }
   },
   syncNow: () => { clearTimeout(syncTimer); runSync(); },
+  syncForce: () => {
+    if (!confirm(t('confirmSyncForce'))) return;
+    syncMeta().forceNext = true;
+    clearTimeout(syncTimer);
+    runSync();
+  },
+  ghOlder: () => { ghRestoreSheet(null, true); },
   ghRestore: () => { ghRestoreSheet(); },
   ghRestoreVersion: (d) => { ghRestoreVersion(d.sha); },
   ghToken: () => ghTokenSheet(),

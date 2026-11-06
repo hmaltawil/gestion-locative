@@ -21,7 +21,7 @@
 - **Static site, no build step:** `index.html`, `css/app.css`, ES modules in `js/`, `vendor/jspdf.umd.min.js` (jsPDF 4.2.1, MIT). Nothing to compile; edit and push.
 - **Offline:** `sw.js` caches every file listed in `FILES`, cache first. A new file must be added to `FILES`, and `VERSION` must change, or phones keep the old code. Installs fetch with `cache: 'reload'` so a new version never stores stale files. The app shows a "new version" bar and reloads only when the user taps it.
 - **Storage (IndexedDB `gestion-locative`, schema version 3):**
-  - `kv`: key `state` holds all the app data as one JSON object; key `secrets` holds the GitHub backup settings, kept out of `state` so they never end up in backups or snapshots.
+  - `kv`: key `state` holds all the app data as one JSON object; key `secrets` holds the GitHub backup settings (including this phone's `device` tag), kept out of `state` so they never end up in backups or snapshots.
   - `files`: attached documents, as `{ name, type, data: ArrayBuffer }`.
   - `snapshots`: automatic copies, as `{ id, at, day, reason, counts, state }`.
 - **Rendering:** `js/app.js` builds HTML strings per route (`location.hash`, for example `#/lease/<id>`). Events are delegated through `data-action`, `data-form` and `data-change` attributes, dispatched to the `actions`, `forms` and `changes` objects. Later features add to these with `Object.assign(actions, {...})`. Every data change goes through `commit(fn)`, which saves, re-renders and calls `afterChange()` (backup scheduling and the daily snapshot).
@@ -30,17 +30,17 @@
 | File | What it does |
 |---|---|
 | `js/app.js` | All screens, sheets, actions, the boot sequence, the service-worker update bar, the theme |
-| `js/calc.js` | **Money logic (pure):** rent due, pro rata, `ledger()` with oldest-debt-first allocation (including one-off adjustments), late amounts, IRL revision status |
-| `js/charges.js` | Charges reconciliation, deposit return statement, lease term and notice dates |
+| `js/calc.js` | **Money logic (pure):** rent due, pro rata, `ledger()` with oldest-debt-first allocation (including one-off adjustments), late amounts, IRL revision status, `rentCallBalance()` (the one source for every rent call) |
+| `js/charges.js` | Charges reconciliation, deposit return statement and `depositSettlement()` (what is booked when the deposit goes back), lease term and notice dates, leases overlapping on one property |
 | `js/tax.js` | Form 2044 summary (cash basis, rent excluding charges), CSV export |
 | `js/deadlines.js` | Deadline list and the `.ics` calendar file |
-| `js/bank.js` | Bank CSV parsing (delimiter, header, French dates and amounts, Revolut format) and lease matching |
-| `js/docs.js` | All PDFs, built with jsPDF |
+| `js/bank.js` | Bank CSV parsing (delimiter, header, French dates and amounts, Revolut format), lease matching, and likely duplicates of payments typed in by hand |
+| `js/docs.js` | All PDFs, built with jsPDF. Every string goes through `pdfText()` (`util.js`) |
 | `js/irl.js` | Built-in INSEE IRL table plus live update (`bdm.insee.fr` allows browser requests) |
 | `js/store.js` | IndexedDB, backup file, restore, `normalize()` (migrates old data; extend it whenever the data model changes) |
 | `js/snapshots.js` | Snapshot rules: 14 daily, 10 event snapshots, 15-day document trash |
 | `js/crypto.js` | AES-256-GCM, with the key derived from the passphrase by PBKDF2-SHA-256 (310,000 iterations), via Web Crypto |
-| `js/sync.js` | GitHub REST API (contents, commits) for the encrypted backup |
+| `js/sync.js` | GitHub REST API (contents, commits) for the encrypted backup; refuses to replace a version saved by another device |
 | `js/support.js` | Anonymised support file |
 | `js/i18n.js` | All interface text, `fr` and `en` (both must have the same keys; a test checks this) |
 | `js/util.js` | Dates, money, French amounts in words |
@@ -49,7 +49,9 @@
 - **Money:** integer **cents** everywhere. `fmtMoney` formats with plain spaces, never non-breaking ones, so PDFs render correctly. `parseMoney` accepts French input.
 - **Dates:** strings `YYYY-MM-DD`; rent periods are `YYYY-MM`. Avoid `Date` objects for calendar logic, because of time zones.
 - **Leases:** `rents[]` holds `{ from: 'YYYY-MM', rent, charges, reason }` entries, sorted by `from`. `trackFrom` and `openingBalance` let leases already running start tracking mid-way. `adjustments[]` holds one-off charges (positive) and credits (negative). `irl` is `{ quarter, key: 'YYYY-Qn', value }`. Also `revisionDate` (MM-DD), `lastRevision`, `insuranceUntil`, `regularizations{year}` and `departure{}`.
-- **Payments** are not tied to a month. `ledger()` allocates them oldest debt first, and records `allocations` per debt, which `tax.js` uses to count rent on the date received.
+- **Payments** are not tied to a month. `ledger()` allocates them oldest debt first, and records `allocations` per debt, which `tax.js` uses to count rent on the date received. An allocation from a charges-reconciliation refund carries `charges: true`: tax counts it as rent received and as negative charges, so a charges refund never lowers line 211. Payments with `method: 'deposit'` are the deposit applied to the account at a departure (not new money).
+- **Deposit return:** `depositSettlement()` books the deductions, applies the deposit (less the 20% held back) as a payment, and books what is sent back as a `refund` adjustment, so the account ends at zero or at what is still owed. The late penalty is not booked: it is the landlord's cost.
+- **Tax figures entered by hand:** `tax: { 'YYYY': { line230 } }` (line 230 is subtracted from the costs).
 
 ## French rules encoded (check with the owner and a professional before changing)
 - **Rent revision:** limited to the one-year change of the IRL for the quarter named in the lease (art. 17-1, law of 6 July 1989). Not backdated, and must be claimed within a year. No increase for properties rated F or G (DPE).
@@ -73,9 +75,10 @@
 - **Playwright:** full-page screenshots hang with `devices['iPhone …']` emulation (`isMobile`), so use a plain viewport. Full-page shots also show the sticky header in the middle and sheets mid-animation; that's not a bug.
 - **From Claude sessions:** pushing git tags is refused, and so is pushing `.claude/` files. The owner adds `.claude/settings.json` themselves if they want fewer prompts. Enabling GitHub Pages through the API is also refused.
 - **iOS storage:** the home-screen app and Safari have separate storage, and deleting the icon erases the data. Hence the three layers: snapshots, the encrypted GitHub backup and the manual backup file.
-- **Backups:** only one "main phone" may be connected to the backup repository (the last save wins). Use "support copy" mode to look at the user's data.
+- **Backups:** only one "main phone" should be connected to the backup repository. Each phone adds its `[device]` tag to its commit messages; when GitHub says the file changed (409/422), a phone replaces it only if the latest commit carries its own tag (its previous answer was lost), otherwise it stops with error `conflict` and offers "Restore" or "Save this phone's data anyway" (`syncForce`). Use "support copy" mode to look at the user's data.
+- **PDF fonts:** jsPDF's built-in Helvetica only has Windows-1252 letters. `pdfText()` (wrapped around `doc.text` and `doc.splitTextToSize` in `newDoc()`) simplifies other letters (Łukasz → Lukasz) instead of printing garbage. A full Unicode font is in the roadmap's Ideas.
 
 ## Current state (6 Nov 2026)
-- **Done:** milestones 1 to 4 (version 1.3.0). The owner's iPhone check passed. The GitHub backup is set up to the private repository `locatif-sauvegarde`.
-- **Next:** milestone 5, the import from Gestion Locative Facile. The owner will send the CSV export files from immobilierloyer.com, format only with names replaced. Build a review screen and a snapshot before importing.
-- **Waiting:** a bank CSV sample (milestone 6), and the legal check of three letters by the ADIL.
+- **Done:** milestones 1 to 4 (version 1.3.0, the owner's iPhone check passed) and version 1.3.1, fixes from a code review (iPhone check pending). The GitHub backup is set up to the private repository `locatif-sauvegarde`.
+- **Next:** milestone 5, the import from Gestion Locative Facile. The owner will send the CSV export files from immobilierloyer.com, format only with names replaced. Build a review screen and a snapshot before importing, and bring in at least the 2025 and 2026 payment and rent history (see the roadmap).
+- **Waiting:** a bank CSV sample (milestone 6), and the legal check by the ADIL (three letters, plus the questions listed in the roadmap: guarantor statement under article 2297, which IRL value applies to a late revision, the late-deposit penalty).

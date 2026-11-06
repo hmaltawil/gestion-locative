@@ -16,7 +16,10 @@ function github(who) { return async (route) => {
   if (p === '/repos/me/backup') return reply(200, { private: repo.private, default_branch: 'main' });
   if (p === '/repos/me/backup/commits') {
     const path = u.searchParams.get('path');
-    return reply(200, repo.commits.filter((c) => c.path === path).slice().reverse().map((c) => ({ sha: c.sha, commit: { committer: { date: c.date }, message: c.message } })));
+    const per = Number(u.searchParams.get('per_page') || 30);
+    const pg = Number(u.searchParams.get('page') || 1);
+    const list = repo.commits.filter((c) => c.path === path).slice().reverse().slice((pg - 1) * per, pg * per);
+    return reply(200, list.map((c) => ({ sha: c.sha, commit: { committer: { date: c.date }, message: c.message } })));
   }
   const m = /^\/repos\/me\/backup\/contents\/(.+)$/.exec(p);
   if (m) {
@@ -176,6 +179,7 @@ async function phone(browser, name) {
   log('wrong passphrase toast:', await C.page.textContent('#toast'));
 
   // wipe, then restore the "before erasing" snapshot
+  const markWipe = repo.puts.length;
   await nav('#/settings');
   await page.click('[data-action=wipe]');
   await page.waitForSelector('.welcome');
@@ -188,6 +192,38 @@ async function phone(browser, name) {
   await page.waitForSelector('.doc-preview', { timeout: 5000 });
   log('after wipe + snapshot restore, document still opens: ok');
 
-  log('ERRORS:', JSON.stringify([...A.errors, ...B.errors, ...C.errors].filter((e) => !/Failed to load resource: the server responded with a status of (401|404)/.test(e))));
+  // ---------- two "main phones": the one that is behind stops instead of overwriting ----------
+  const waitPut = async (who, from) => {
+    const t0 = Date.now();
+    while (!repo.puts.slice(from).some((x) => x.who === who && x.path === 'backup/data.json.enc') && Date.now() - t0 < 25000) await page.waitForTimeout(500);
+    return repo.puts.slice(from).some((x) => x.who === who && x.path === 'backup/data.json.enc');
+  };
+  log('phone A saved after the snapshot restore:', await waitPut('phoneA', markWipe));
+  await B.nav('#/settings'); await B.page.click('[data-action=ghRestore]');
+  await B.page.waitForSelector('#sheet [data-action=ghRestoreVersion]', { timeout: 10000 });
+  await B.page.click('#sheet [data-action=ghRestoreVersion] >> nth=0');
+  await B.page.waitForSelector('.tiles', { timeout: 15000 });
+  let mark = repo.puts.length;
+  await B.nav('#/expense-new');
+  await B.page.fill('input[name=description]', 'Serrurier'); await B.page.fill('[name=amount]', '90');
+  await B.page.click('button[type=submit]');
+  log('phone B saved its change:', await waitPut('phoneB', mark));
+  const latest = repo.files.get('backup/data.json.enc').text;
+  mark = repo.puts.length;
+  await nav('#/expense-new');
+  await page.fill('input[name=description]', 'Peintre'); await page.fill('[name=amount]', '300');
+  await page.click('button[type=submit]');
+  await nav('#/settings');
+  await page.waitForSelector('[data-action=syncForce]', { timeout: 25000 });
+  log('phone A, behind, did not overwrite:', repo.files.get('backup/data.json.enc').text === latest && !repo.puts.slice(mark).some((x) => x.who === 'phoneA' && x.path === 'backup/data.json.enc'));
+  log('phone A status:', (await page.textContent('#sync-status')).replace(/\s+/g, ' ').trim().slice(0, 70));
+  await nav('#/');
+  log('home banner:', (await page.textContent('.banner.warn')).trim().slice(0, 60));
+  await nav('#/settings');
+  await page.click('[data-action=syncForce]');
+  log('after "save anyway", phone A saved:', await waitPut('phoneA', mark));
+  if (repo.files.get('backup/data.json.enc').text === latest) throw new Error('save anyway did not save');
+
+  log('ERRORS:', JSON.stringify([...A.errors, ...B.errors, ...C.errors].filter((e) => !/Failed to load resource: the server responded with a status of (401|404|409)/.test(e))));
   await browser.close();
 })().catch((e) => { console.error('FAILED', e.message.split('\n').slice(0, 4).join(' | ')); process.exit(1); });

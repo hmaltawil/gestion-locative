@@ -245,7 +245,7 @@ const fr = {
   retentionHint: 'Jusqu\'à 20 % du dépôt ({max}) dans l\'attente des comptes annuels de l\'immeuble.',
   statement: 'Décompte', arrears: 'Loyers et charges dus', tenantStillOwes: 'Le locataire reste devoir', toReturn: 'À restituer',
   depositDeadline: 'Date limite de restitution : {date} ({months} mois après la remise des clés).',
-  latePenalty: 'Retard : {n} mois, pénalité de {amount} (10 % du loyer par mois commencé).',
+  latePenalty: 'Retard : {n} mois, majoration de {amount} ajoutée au montant à restituer (10 % du loyer hors charges par mois commencé).',
   futureDepartureHint: 'Départ futur : les loyers à venir ne sont pas encore comptés.',
   statementPdf: 'Décompte PDF', markReturned: 'Dépôt restitué',
   markReturnedHint: 'Les retenues et les sommes dues seront soldées sur le compte du locataire.',
@@ -257,7 +257,7 @@ const fr = {
   microYes: 'Micro-foncier possible (loyers ≤ 15 000 €) : revenu imposable {amount} après abattement de 30 %. Comparez avant de choisir.',
   microNo: 'Micro-foncier impossible : loyers bruts au-dessus de 15 000 €.',
   notDeductible: 'Non déductible et non compté : {amount} (charges récupérables, TEOM, autres).',
-  taxHint: 'Loyers comptés à leur date d\'encaissement, hors charges. Indicatif : vérifiez avec la notice 2044 de l\'année (ligne 230 pour la copropriété, déficit foncier).',
+  taxHint: 'Loyers comptés à leur date d\'encaissement, hors charges. Indicatif : vérifiez avec la notice 2044 de l\'année (déficit foncier, régimes particuliers).',
   byProperty: 'Par bien', chargesReceived: 'Charges encaissées {amount}', summaryPdf: 'Récapitulatif PDF', exportCsv: 'Export CSV (comptable)',
 
   documents: 'Documents', noDocuments: 'Aucun document.', addDocument: 'Ajouter des documents', files: 'Fichiers',
@@ -297,6 +297,23 @@ const fr = {
   shareIcsHint: 'Autre solution : choisissez Mail, envoyez-le-vous, puis touchez la pièce jointe dans Mail et « Tout ajouter ».',
   appearance: 'Apparence', theme_light: 'Clair', theme_dark: 'Sombre', theme_auto: 'Automatique',
   themeHint: 'Automatique suit le réglage clair ou sombre de l\'iPhone.',
+  // 1.3.1
+  importMaybeDup: 'Peut-être déjà saisi à la main : paiement du {date} ({who}). Cochez seulement s\'il s\'agit d\'un autre versement.',
+  regOverlap: 'Un autre bail de ce bien couvre aussi une partie de {year} en même temps. Indiquez seulement la part des charges de ce locataire.',
+  penaltyShort: 'Majoration pour retard',
+  returnIncludesPenalty: "Le montant comprend la majoration pour retard de {amount}. Elle n'est pas due si le retard vient de ce que le locataire n'a pas donné sa nouvelle adresse.",
+  line230Title: 'Ligne 230 : régularisation des charges de copropriété',
+  line230Hint: "Les provisions de copropriété déduites l'an dernier (ligne 229 de {prev}) comprenaient des dépenses non déductibles, par exemple les charges récupérables sur le locataire. Leur montant figure dans le décompte annuel du syndic. Il est retiré du total des frais.",
+  line230Amount: 'Montant à réintégrer (toutes copropriétés)',
+  l230: 'Régularisation des provisions de copropriété (à déduire)',
+  depositHint: 'Location vide : au plus 1 mois de loyer hors charges.',
+  depositAboveCap: 'Le dépôt de garantie dépasse 1 mois de loyer hors charges ({max}), le maximum pour une location vide. Enregistrer quand même ?',
+  syncConflict: "Un autre téléphone a enregistré une sauvegarde depuis la dernière de celui-ci. Pour ne pas effacer ses changements, ce téléphone n'enregistre plus. Restaurez la dernière version depuis GitHub ou, si ce téléphone a les bonnes données, enregistrez-les quand même.",
+  syncForce: 'Enregistrer ce téléphone quand même',
+  confirmSyncForce: "Remplacer la sauvegarde GitHub par les données de ce téléphone ? Les changements faits sur l'autre téléphone ne seront plus dans la dernière version (ils restent dans l'historique GitHub).",
+  syncConflictBanner: 'Sauvegarde GitHub en pause : un autre téléphone a enregistré. Touchez pour choisir.',
+  'syncErr_conflict': 'un autre téléphone a enregistré une sauvegarde',
+  ghOlder: 'Versions plus anciennes',
 };
 
 const en = {
@@ -544,7 +561,7 @@ const en = {
   retentionHint: 'Up to 20 % of the deposit ({max}) until the building\'s yearly accounts are approved.',
   statement: 'Statement', arrears: 'Rent and charges owed', tenantStillOwes: 'Tenant still owes', toReturn: 'To return',
   depositDeadline: 'Return deadline: {date} ({months} month(s) after the keys were returned).',
-  latePenalty: 'Late: {n} month(s), penalty {amount} (10 % of rent per started month).',
+  latePenalty: 'Late: {n} month(s), a penalty of {amount} is added to the amount to return (10 % of the rent excluding charges per started month).',
   futureDepartureHint: 'Future departure: rent for coming months is not counted yet.',
   statementPdf: 'Statement PDF', markReturned: 'Deposit returned',
   markReturnedHint: 'Deductions and amounts owed will be settled on the tenant\'s account.',
@@ -556,7 +573,7 @@ const en = {
   microYes: 'Micro-foncier possible (rents ≤ €15,000): taxable income {amount} after the 30 % allowance. Compare before choosing.',
   microNo: 'Micro-foncier not possible: gross rents above €15,000.',
   notDeductible: 'Not deductible and not counted: {amount} (recoverable charges, TEOM, other).',
-  taxHint: 'Rents counted on the date received, excluding charges. A guide only: check with that year\'s 2044 instructions (line 230 for building charges, deficits).',
+  taxHint: 'Rents counted on the date received, excluding charges. A guide only: check with that year\'s 2044 instructions (deficits, special schemes).',
   byProperty: 'By property', chargesReceived: 'Charges received {amount}', summaryPdf: 'Summary PDF', exportCsv: 'CSV export (accountant)',
 
   documents: 'Documents', noDocuments: 'No documents.', addDocument: 'Add documents', files: 'Files',
@@ -596,6 +613,23 @@ const en = {
   shareIcsHint: 'Another way: choose Mail, send it to yourself, then tap the attachment in Mail and "Add All".',
   appearance: 'Appearance', theme_light: 'Light', theme_dark: 'Dark', theme_auto: 'Automatic',
   themeHint: 'Automatic follows the iPhone\'s light or dark setting.',
+  // 1.3.1
+  importMaybeDup: 'Maybe already entered by hand: payment of {date} ({who}). Tick it only if it is a different payment.',
+  regOverlap: 'Another lease of this property also runs during part of {year} at the same time. Enter only this tenant\'s share of the charges.',
+  penaltyShort: 'Late penalty',
+  returnIncludesPenalty: "The amount includes the late penalty of {amount}. It isn't owed if the delay is because the tenant didn't give their new address.",
+  line230Title: 'Line 230: building charges adjustment',
+  line230Hint: "Last year's building charges advances (line 229 for {prev}) included costs that aren't deductible, such as charges recoverable from the tenant. The amount is on the managing agent's yearly statement. It is taken off the total costs.",
+  line230Amount: 'Amount to add back (all buildings)',
+  l230: 'Building charges advances adjustment (subtracted)',
+  depositHint: 'Unfurnished let: at most one month\'s rent excluding charges.',
+  depositAboveCap: 'The deposit is more than one month\'s rent excluding charges ({max}), the maximum for an unfurnished let. Save anyway?',
+  syncConflict: "Another phone has saved a backup since this phone's last one. To avoid erasing its changes, this phone has stopped saving. Restore the latest version from GitHub or, if this phone has the right data, save it anyway.",
+  syncForce: "Save this phone's data anyway",
+  confirmSyncForce: "Replace the GitHub backup with this phone's data? Changes made on the other phone won't be in the latest version (they stay in GitHub's history).",
+  syncConflictBanner: 'GitHub backup paused: another phone has saved. Tap to choose.',
+  'syncErr_conflict': 'another phone has saved a backup',
+  ghOlder: 'Show older versions',
 };
 
 const DICTS = { fr, en };

@@ -182,6 +182,38 @@ export function daysBetween(a, b) {
   return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
 }
 
+// ---------- text that the PDF fonts can show ----------
+// jsPDF's built-in fonts only know the Windows-1252 characters (all French
+// letters, € and typographic quotes). Other letters would print as garbage
+// ("Łukasz" -> "Aukasz"), so they are replaced by the closest letter:
+// "Łukasz Wójcik" -> "Lukasz Wójcik", "Nguyễn" -> "Nguyên", "Şahin" -> "Sahin".
+const CP1252_EXTRA = new Set('€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ');
+const PDF_REPLACE = {
+  'Ł': 'L', 'ł': 'l', 'Đ': 'D', 'đ': 'd', 'Ħ': 'H', 'ħ': 'h', 'ı': 'i', 'Ŀ': 'L', 'ŀ': 'l', 'Ŧ': 'T', 'ŧ': 't',
+  'Ĳ': 'IJ', 'ĳ': 'ij', 'ŉ': 'n', 'ſ': 's', 'Ə': 'E', 'ə': 'e', 'Ŋ': 'N', 'ŋ': 'n', 'ĸ': 'k',
+  '\u202f': ' ', '\u2009': ' ', '\u2007': ' ', '−': '-', '‐': '-', '‑': '-', '→': '->', '≤': '<=', '≥': '>=',
+};
+
+function pdfSafe(ch) {
+  const c = ch.codePointAt(0);
+  return ch === '\n' || (c >= 0x20 && c <= 0x7e) || (c >= 0xa0 && c <= 0xff) || CP1252_EXTRA.has(ch);
+}
+
+export function pdfText(s) {
+  let out = '';
+  for (const ch of String(s ?? '').normalize('NFC')) {
+    if (pdfSafe(ch)) { out += ch; continue; }
+    if (ch === '\t') { out += ' '; continue; }
+    if (PDF_REPLACE[ch] !== undefined) { out += PDF_REPLACE[ch]; continue; }
+    // Drop accents one at a time until the letter can be shown ("ễ" -> "ê" -> "e").
+    let d = ch.normalize('NFD');
+    while (d.length > 1 && !pdfSafe(d.normalize('NFC'))) d = d.slice(0, -1);
+    const r = d.normalize('NFC');
+    out += pdfSafe(r) ? r : /\p{M}/u.test(ch) ? '' : '?';
+  }
+  return out;
+}
+
 export function normalizeText(s) {
   return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
 }

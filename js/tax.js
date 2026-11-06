@@ -16,6 +16,10 @@ function inYear(date, year) {
 }
 
 // Rent (excl. charges) received in the year for one lease, by allocation date.
+// A refund from the charges reconciliation that settles part of a month gives
+// back charges, not rent: that month's rent still counts in full, and the
+// charges received go down by the same amount. Other credits (a gesture, an
+// advance from before tracking) are not money received.
 export function rentReceived(lease, payments, year, today) {
   const led = ledger(lease, payments, today);
   let rent = 0;
@@ -23,7 +27,7 @@ export function rentReceived(lease, payments, year, today) {
   for (const d of led.debts) {
     if (d.kind === 'adjustment') continue;
     for (const a of d.allocations) {
-      if (!a.real || !inYear(a.date, year)) continue;
+      if (!(a.real || a.charges) || !inYear(a.date, year)) continue;
       let ratio;
       if (d.kind === 'period') ratio = d.total ? d.rent / d.total : 1;
       else {
@@ -32,7 +36,7 @@ export function rentReceived(lease, payments, year, today) {
       }
       const part = Math.round(a.amount * ratio);
       rent += part;
-      charges += a.amount - part;
+      charges += a.real ? a.amount - part : -part;
     }
   }
   // Money received in advance is taxable when received.
@@ -85,7 +89,11 @@ export function taxSummary(state, year, today) {
   const gross = props.reduce((s, p) => s + p.rent, 0);
   lines['211'] = gross;
   lines['215'] = gross;
-  const expenses = ['221', '222', '223', '224', '225', '226', '227', '228', '229', '230'].reduce((s, k) => s + (lines[k] || 0), 0);
+  // Line 230 (entered on the tax screen): the part of last year's building
+  // charges provisions that was not deductible. It is subtracted (240 = 221 to 229 - 230).
+  const line230 = Number(((state.tax || {})[year] || {}).line230) || 0;
+  if (line230) lines['230'] = line230;
+  const expenses = ['221', '222', '223', '224', '225', '226', '227', '228', '229'].reduce((s, k) => s + (lines[k] || 0), 0) - line230;
   lines['240'] = expenses;
   const interest = lines['250'] || 0;
   const result = gross - expenses - interest;

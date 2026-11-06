@@ -94,6 +94,10 @@ export function departureStatement(lease, led, dep, today) {
   const returnedOn = dep.returnedOn || null;
   const late = lateMonths(deadline, returnedOn || today);
   const rent = currentRent(lease, lease.endDate || today).rent;
+  // The penalty is added to the deposit still owed to the tenant, so there is
+  // none when nothing is left to return.
+  const refund = Math.max(0, net);
+  const penalty = refund > 0 ? late * Math.round(rent * 0.1) : 0;
   return {
     deposit,
     arrears,
@@ -101,13 +105,48 @@ export function departureStatement(lease, led, dep, today) {
     deductions,
     retention,
     maxRetention,
-    toReturn: Math.max(0, net),
+    refund, // from the tenant's account: deposit + overpayment - what is owed
+    penalty,
+    toReturn: refund + penalty,
     stillOwed: Math.max(0, -net),
     keysDate,
     deadline,
     lateMonths: late,
-    penalty: late * Math.round(rent * 0.1),
   };
+}
+
+// What is booked on the tenant's account once the deposit is returned:
+// deductions become charges, the deposit (less any amount held back) is
+// applied to the account, and the money sent back from the account is a
+// refund. The account then ends at zero, or at what the tenant still owes.
+// The late penalty is the landlord's own cost, so it is not booked here.
+export function depositSettlement(st, deductions, keysDate, date) {
+  const adjustments = [];
+  for (const d of deductions || []) {
+    const amount = Number(d.amount) || 0;
+    if (amount > 0) adjustments.push({ date: keysDate, label: d.label || 'Retenue sur dépôt', amount, kind: 'deduction' });
+  }
+  if (st.refund > 0) adjustments.push({ date, label: 'Restitution du dépôt de garantie', amount: st.refund, kind: 'refund' });
+  const applied = st.deposit - st.retention;
+  const payment = applied > 0 ? { amount: applied, date, method: 'deposit', note: 'Dépôt de garantie imputé sur le compte' } : null;
+  return { adjustments, payment };
+}
+
+// Other leases of the same property that run at the same time as this one
+// during the year (then the charges entered must be this tenant's share only).
+export function overlappingLeases(leases, lease, year) {
+  const span = (l) => {
+    const from = !l.startDate || l.startDate < `${year}-01-01` ? `${year}-01-01` : l.startDate;
+    const to = l.endDate && l.endDate < `${year}-12-31` ? l.endDate : `${year}-12-31`;
+    return [from, to];
+  };
+  const [a1, a2] = span(lease);
+  if (a2 < a1) return [];
+  return leases.filter((o) => {
+    if (o.id === lease.id || o.propertyId !== lease.propertyId) return false;
+    const [b1, b2] = span(o);
+    return b1 <= b2 && b1 <= a2 && a1 <= b2;
+  });
 }
 
 // Unfurnished lease by a private landlord: 3-year terms, renewed tacitly.

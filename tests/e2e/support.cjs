@@ -16,7 +16,10 @@ function github(who) { return async (route) => {
   if (p === '/repos/me/backup') return reply(200, { private: repo.private, default_branch: 'main' });
   if (p === '/repos/me/backup/commits') {
     const path = u.searchParams.get('path');
-    return reply(200, repo.commits.filter((c) => c.path === path).slice().reverse().map((c) => ({ sha: c.sha, commit: { committer: { date: c.date }, message: c.message } })));
+    const per = Number(u.searchParams.get('per_page') || 30);
+    const pg = Number(u.searchParams.get('page') || 1);
+    const list = repo.commits.filter((c) => c.path === path).slice().reverse().slice((pg - 1) * per, pg * per);
+    return reply(200, list.map((c) => ({ sha: c.sha, commit: { committer: { date: c.date }, message: c.message } })));
   }
   const m = /^\/repos\/me\/backup\/contents\/(.+)$/.exec(p);
   if (m) {

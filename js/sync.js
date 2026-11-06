@@ -70,7 +70,14 @@ export async function getSha(cfg, path) {
 }
 
 // Creates or replaces a file. Returns the new file sha.
-export async function putFile(cfg, path, text, message, sha) {
+// When the file changed on GitHub since `sha` (or already exists):
+// - by default the current version is replaced (documents never change, so
+//   replacing one is harmless);
+// - with opts.refuseConflicts, a version saved by another device is never
+//   replaced: SyncError('conflict') is thrown instead. A version saved by this
+//   device (its commit message contains opts.tag) is still replaced: that
+//   happens when GitHub saved our last upload but the answer was lost.
+export async function putFile(cfg, path, text, message, sha, opts = {}) {
   const send = (s) => gh(cfg, 'PUT', `/repos/${cfg.repo}/contents/${encPath(path)}`, {
     message,
     content: bytesToB64(new TextEncoder().encode(text)),
@@ -78,7 +85,11 @@ export async function putFile(cfg, path, text, message, sha) {
   });
   let res = await send(sha);
   if (res.status === 409 || res.status === 422) {
-    // The file changed on GitHub (or already exists): use its current version.
+    if (opts.refuseConflicts) {
+      const [last] = await listVersions(cfg, path, { perPage: 1 });
+      const ours = opts.tag && last && String(last.message || '').includes(opts.tag);
+      if (!ours) throw new SyncError('conflict', res.status);
+    }
     const current = await getSha(cfg, path);
     res = await send(current);
   }
@@ -89,9 +100,11 @@ export async function putFile(cfg, path, text, message, sha) {
   return (j.content && j.content.sha) || null;
 }
 
-// Versions of a file, newest first: [{ sha, date, message }]
-export async function listVersions(cfg, path = DATA_PATH) {
-  const res = await gh(cfg, 'GET', `/repos/${cfg.repo}/commits?path=${encodeURIComponent(path)}&per_page=30`);
+// Versions of a file, newest first: [{ sha, date, message }].
+// One page at a time (page 1 = newest); a full page means there may be more.
+export const VERSIONS_PER_PAGE = 50;
+export async function listVersions(cfg, path = DATA_PATH, { page = 1, perPage = VERSIONS_PER_PAGE } = {}) {
+  const res = await gh(cfg, 'GET', `/repos/${cfg.repo}/commits?path=${encodeURIComponent(path)}&per_page=${perPage}&page=${page}`);
   if (res.status === 404 || res.status === 409) return []; // 409: empty repository
   if (!res.ok) throw new SyncError('unknown', res.status);
   const j = await res.json();
