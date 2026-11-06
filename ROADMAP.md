@@ -82,7 +82,7 @@ Built before the import because the import was waiting for the export files.
 - [x] Browser tests saved in `tests/e2e/` (see CLAUDE.md)
 
 ### ✅ Version 1.3.1 · Fixes from the code review (6 Nov 2026)
-iPhone check pending (see [Waiting](#waiting-on-you)).
+Code: [`53dd3fc`](https://github.com/hmaltawil/gestion-locative/commit/53dd3fc). Checked on the iPhone (6 Nov 2026).
 
 Wrong numbers:
 - [x] Deposit return: a tenant who had paid too much no longer ends up owing money afterwards; the account now ends at exactly what the statement says
@@ -126,11 +126,11 @@ Smaller:
   - [x] "New version available" bar after an update
   - [x] Deadlines › Add to Calendar (fixed in 1.1.2)
   - [x] Choose a bank CSV file (works with Revolut; your real bank's file comes with milestone 6)
-- ⏳ **Check version 1.3.1 on the iPhone:** open the app, tap the "new version" bar, then try:
-  - [ ] Settings › About shows 1.3.1
-  - [ ] A rent call from a lease page and from the monthly send show the same total
-  - [ ] Tax summary › line 230 can be saved
-  - [ ] A guarantor agreement PDF: the statement to copy by hand and the signatures are on the same page
+- ✅ **Version 1.3.1 checked on the iPhone** (6 Nov 2026)
+  - [x] Settings › About shows 1.3.1
+  - [x] A rent call from a lease page and from the monthly send show the same total
+  - [x] Tax summary › line 230 can be saved
+  - [x] A guarantor agreement PDF: the statement to copy by hand and the signatures are on the same page
 - ⏳ **Legal check, done once:** have the guarantor agreement, formal notice and deposit return letter reviewed, for example by your local ADIL. Questions to ask:
   - Guarantor agreement: since 2022 (article 2297 of the Civil Code), is the handwritten statement now complete (amount in figures and words; for a joint guarantee, the acknowledgment that the landlord need not pursue the tenant first)?
   - Rent revision claimed late: which IRL value applies, the latest published on the anniversary date or the latest published on the day of the request? Today the app uses the latest available on the day you tap, so with an anniversary just before INSEE publishes, a few days' difference changes the index used. Once answered, the app can follow the rule.
