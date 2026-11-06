@@ -14,6 +14,7 @@
   --bad-soft: #fbe6e4;
   --input: #f7f8fa;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --on-accent: #ffffff; /* text on filled buttons */
   --radius: 14px;
   --tabbar-h: 58px;
   color-scheme: light;
@@ -35,6 +36,7 @@
     --bad: #ff8077;
     --bad-soft: #3d1c1a;
     --input: #22262d;
+    --on-accent: #0d1424;
     --shadow: none;
     color-scheme: dark;
   }
@@ -44,7 +46,7 @@
   --bg: #111317; --card: #1b1e24; --text: #eceef2; --muted: #9aa1ae; --line: #2b2f37;
   --accent: #7ea2ff; --accent-soft: #1f2a44; --ok: #5fd39a; --ok-soft: #173326;
   --warn: #f3b25b; --warn-soft: #3a2a12; --bad: #ff8077; --bad-soft: #3d1c1a; --input: #22262d;
-  --shadow: none; color-scheme: dark;
+  --on-accent: #0d1424; --shadow: none; color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -111,12 +113,14 @@ p { margin: 0 0 10px; }
 .row { display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
 .row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; color: var(--text); }
 .row-main strong, .row-link strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.row-link strong + br { display: none; } /* the title is already on its own line */
 .row-side { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 .row-link { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; color: var(--text); }
 .row-link > span:first-child { min-width: 0; flex: 1; }
 .list.plain .row-link { padding: 10px 0; }
 .row-end { display: flex; align-items: center; gap: 6px; color: var(--muted); flex: none; }
 .amount { font-variant-numeric: tabular-nums; font-size: 14px; color: var(--muted); white-space: nowrap; }
+.amount.bad { color: var(--bad); font-weight: 600; }
 .done { color: var(--ok); display: inline-flex; width: 58px; justify-content: center; }
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
@@ -125,16 +129,19 @@ p { margin: 0 0 10px; }
 
 .pill {
   display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap;
-  background: var(--line); color: var(--muted);
+  background: var(--line); color: var(--muted); font-variant-numeric: tabular-nums;
 }
 .pill.ok { background: var(--ok-soft); color: var(--ok); }
 .pill.warn { background: var(--warn-soft); color: var(--warn); }
 .pill.bad { background: var(--bad-soft); color: var(--bad); }
 
 .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
-.tile { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 10px 12px; box-shadow: var(--shadow); min-width: 0; }
+.tile {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 10px 12px; box-shadow: var(--shadow); min-width: 0;
+  display: flex; flex-direction: column; /* amount at the bottom, so all three line up when a label wraps */
+}
 .tile-label { display: block; font-size: 12px; color: var(--muted); }
-.tile-value { display: block; font-size: 16px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-value { display: block; font-size: 16px; font-weight: 700; margin-top: auto; padding-top: 4px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile.bad .tile-value { color: var(--bad); }
 
 .banner {
@@ -209,7 +216,7 @@ textarea { resize: vertical; }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  background: var(--accent); color: #fff; border: 1px solid var(--accent); border-radius: 12px;
+  background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); border-radius: 12px;
   padding: 11px 18px; font: inherit; font-weight: 600; font-size: 16px; min-height: 44px; cursor: pointer;
 }
 :root .btn .icon { width: 18px; height: 18px; }
@@ -227,7 +234,7 @@ textarea { resize: vertical; }
 .danger-zone { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 20px; }
 .content > .btn.danger { width: 100%; margin-bottom: 20px; }
 
-.sigpad { width: 100%; aspect-ratio: 600 / 220; background: #fff; border: 1px dashed var(--muted); border-radius: 10px; touch-action: none; margin-bottom: 10px; display: block; }
+.sigpad { width: 100%; aspect-ratio: 600 / 220; background: #fff; border: 1px dashed var(--muted); border-radius: 10px; touch-action: none; margin-bottom: 12px; display: block; }
 .sig-preview { display: block; max-width: 220px; background: #fff; border-radius: 8px; margin-bottom: 10px; border: 1px solid var(--line); }
 
 /* tab bar */
@@ -335,3 +342,13 @@ fieldset.card:disabled { opacity: .75; }
   font-size: 13px; text-align: center; padding: calc(env(safe-area-inset-top) + 6px) 12px 6px;
 }
 .support-bar + .topbar { padding-top: 6px; top: 0; }
+
+/* v1.3.2: lists with a status column and an action column (rents, months,
+   deadlines, monthly send). Every row shares the same columns, so amounts,
+   pills and buttons line up whatever the language. */
+@supports (grid-template-columns: subgrid) {
+  .list.cols { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 10px; }
+  .list.cols > li.row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; }
+  .list.cols > li.row > :nth-child(2) { justify-self: end; }
+  .list.cols > li.row > :nth-child(3) { justify-self: center; }
+}

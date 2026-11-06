@@ -26,7 +26,7 @@ import { buildIcs, deadlines, defaultExpiry } from './deadlines.js';
 import { anonymize } from './support.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.3.1';
+export const APP_VERSION = '1.3.2';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -270,13 +270,17 @@ function viewHome() {
   const order = (it) => (it.ledger.overdue > 0 ? 0 : it.row && it.row.status !== 'paid' ? 1 : 2);
   const items = [...ov.items].sort((a, b) => order(a) - order(b) || propName(prop(a.lease.propertyId)).localeCompare(propName(prop(b.lease.propertyId))));
 
+  // Every row: status on top and amount below, then the action, so the
+  // columns line up from one tenant to the next.
   const list = items.map(({ lease, ledger: led, row }) => {
     let status;
     let amount = '';
-    if (led.overdue > 0) { status = pill('late', t('lateAmount', { amount: fmtMoney(led.overdue) })); }
-    else if (row) {
+    if (led.overdue > 0) {
+      status = pill('late');
+      amount = `<span class="amount bad">${fmtMoney(led.overdue)}</span>`;
+    } else if (row) {
       status = pill(row.status);
-      amount = row.status === 'paid' ? fmtMoney(row.total) : fmtMoney(row.total - row.paid);
+      amount = `<span class="amount">${fmtMoney(row.status === 'paid' ? row.total : row.total - row.paid)}</span>`;
     } else status = pill('upcoming', t('notStarted'));
     const showPay = led.owed > 0;
     return `<li class="row">
@@ -284,7 +288,7 @@ function viewHome() {
         <strong>${esc(tenantsLabel(lease))}</strong>
         <span class="muted">${esc(propName(prop(lease.propertyId)))}</span>
       </a>
-      <div class="row-side">${status}${amount ? `<span class="amount">${amount}</span>` : ''}</div>
+      <div class="row-side">${status}${amount}</div>
       ${showPay ? `<button class="btn small" data-action="pay" data-lease="${lease.id}">${esc(t('recordPaymentShort'))}</button>` : `<span class="done">${icon('check')}</span>`}
     </li>`;
   }).join('');
@@ -306,7 +310,7 @@ function viewHome() {
         <li><a class="row-link" href="#/lease/${l.id}"><span><strong>${esc(tenantsLabel(l))}</strong><br><span class="muted">${esc(t('revisionLine', { from: fmtMoney(info.currentRent), to: fmtMoney(info.newRent), pct: info.pct.toFixed(2) }))}</span></span>${icon('chevron')}</a></li>`).join('')}</ul></section>` : ''}
       <section class="card flush">
         <h3 class="pad">${esc(t('thisMonthRents'))}</h3>
-        ${items.length ? `<ul class="list">${list}</ul>` : empty(t('noActiveLeases'), `<a class="btn" href="#/lease-new">${esc(t('addLease'))}</a>`)}
+        ${items.length ? `<ul class="list cols">${list}</ul>` : empty(t('noActiveLeases'), `<a class="btn" href="#/lease-new">${esc(t('addLease'))}</a>`)}
       </section>`,
   });
 }
@@ -479,7 +483,7 @@ function viewLease(r) {
       <section class="card flush">
         <h3 class="pad">${esc(t('monthByMonth'))}</h3>
         ${led.opening ? `<p class="pad muted small">${esc(t('openingLine', { amount: fmtMoney(led.opening.total), paid: fmtMoney(led.opening.paid) }))}</p>` : ''}
-        ${shown.length ? `<ul class="list">${ledgerList}</ul>` : empty(t('noPeriodsYet'))}
+        ${shown.length ? `<ul class="list cols">${ledgerList}</ul>` : empty(t('noPeriodsYet'))}
         ${!showAll && rows.length > 12 ? `<a class="more" href="#/lease/${l.id}?all=1">${esc(t('showAll', { n: rows.length }))}</a>` : ''}
       </section>
       ${adjustmentsSection(l, led)}
@@ -562,11 +566,12 @@ function viewLeaseForm(r) {
           ${moneyField(t('rentHC'), 'rent', null, '', 'required')}
           ${moneyField(t('charges'), 'charges', 0)}
         </div>` : `<p class="hint">${esc(t('rentEditHint'))}</p>`}
+        ${field(t('chargesType'), select('chargesType', [['provision', t('chargesProvision')], ['forfait', t('chargesForfait')]], l.chargesType))}
         <div class="grid2">
-          ${field(t('chargesType'), select('chargesType', [['provision', t('chargesProvision')], ['forfait', t('chargesForfait')]], l.chargesType))}
           ${field(t('paymentDay'), input('paymentDay', l.paymentDay || 1, 'type="number" min="1" max="28" inputmode="numeric"'))}
+          ${moneyField(t('deposit'), 'deposit', l.deposit)}
         </div>
-        ${moneyField(t('deposit'), 'deposit', l.deposit, t('depositHint'))}
+        <p class="hint">${esc(t('depositHint'))}</p>
       </section>
       <section class="card">
         <h3>${esc(t('revisionSection'))}</h3>
@@ -701,12 +706,10 @@ function viewSettings() {
       </form>
       <section class="card">
         <h3>${esc(t('signature'))}</h3>
-        <p class="hint">${esc(t('signatureHint'))}</p>
-        ${s.signature ? `<img class="sig-preview" src="${s.signature}" alt="">` : ''}
-        <canvas id="sigpad" class="sigpad" width="600" height="220"></canvas>
+        <p class="hint">${esc(t('signatureCardHint'))}</p>
+        ${s.signature ? `<img class="sig-preview" src="${s.signature}" alt="${esc(t('signature'))}">` : `<p class="muted">${esc(t('noSignature'))}</p>`}
         <div class="btn-row">
-          <button class="btn secondary" type="button" data-action="sigClear">${esc(t('clear'))}</button>
-          <button class="btn" type="button" data-action="sigSave">${esc(t('saveSignature'))}</button>
+          <button class="btn secondary" type="button" data-action="sigOpen">${esc(t(s.signature ? 'changeSignature' : 'addSignature'))}</button>
           ${s.signature ? `<button class="btn ghost danger" type="button" data-action="sigRemove">${esc(t('remove'))}</button>` : ''}
         </div>
       </section>
@@ -775,7 +778,7 @@ function dlRow(it) {
   if (it.kind === 'custom') acts = `<button class="btn small secondary" data-action="reminderDone" data-id="${it.reminderId}">${esc(t('done'))}</button>`;
   return `<li class="row">
     <a class="row-main" href="${it.href}"><strong class="wrap">${esc(dlTitle(it))}</strong><span class="muted">${esc(dlSub(it))}</span></a>
-    <div class="row-side">${when}</div>${acts}
+    <div class="row-side">${when}</div>${acts || '<span></span>'}
   </li>`;
 }
 
@@ -785,7 +788,7 @@ function homeDeadlines() {
     .slice(0, 5);
   if (!items.length) return '';
   return `<section class="card flush"><div class="card-head pad"><h3>${esc(t('upcomingDeadlines'))}</h3><a class="small" href="#/deadlines">${esc(t('seeAll'))}</a></div>
-    <ul class="list">${items.map(dlRow).join('')}</ul></section>`;
+    <ul class="list cols">${items.map(dlRow).join('')}</ul></section>`;
 }
 
 function viewDeadlines() {
@@ -806,7 +809,7 @@ function viewDeadlines() {
         <button class="btn secondary" data-action="exportIcs">${icon('calendar')} ${esc(t('addToCalendar'))}</button>
       </div>
       <p class="hint">${esc(t('icsHint'))}</p>
-      ${groups.filter(([, list]) => list.length).map(([k, list]) => `<section class="card flush"><h3 class="pad">${esc(t(k))}</h3><ul class="list">${list.map(dlRow).join('')}</ul></section>`).join('') || empty(t('noDeadlines'))}
+      ${groups.filter(([, list]) => list.length).map(([k, list]) => `<section class="card flush"><h3 class="pad">${esc(t(k))}</h3><ul class="list cols">${list.map(dlRow).join('')}</ul></section>`).join('') || empty(t('noDeadlines'))}
       ${custom.length ? `<section class="card flush"><h3 class="pad">${esc(t('myReminders'))}</h3><ul class="list">${custom.map((r) => `<li class="row">
         <div class="row-main"><strong>${esc(r.title)}</strong><span class="muted">${fmtDate(r.date)}${r.repeat === 'yearly' ? ' · ' + esc(t('everyYear')) : ''}</span></div>
         <button class="link danger" data-action="reminderDelete" data-id="${r.id}">${esc(t('delete'))}</button></li>`).join('')}</ul></section>` : ''}`,
@@ -901,7 +904,7 @@ function viewBatch(r) {
       </div>
       <div class="filters one">${select('period', options.sort().map((p) => [p, fmtPeriodCap(p, lang)]), period, `data-change="batchPeriod" data-type="${type}"`)}</div>
       <p class="hint">${esc(t('batchHint'))}</p>
-      <section class="card flush">${list.length ? `<ul class="list">${rows}</ul>` : empty(t('noActiveLeases'))}</section>
+      <section class="card flush">${list.length ? `<ul class="list cols">${rows}</ul>` : empty(t('noActiveLeases'))}</section>
       ${ready ? `<button class="btn block secondary" data-action="batchAll" data-type="${type}" data-period="${period}">${icon('doc')} ${esc(t('allInOne', { n: ready }))}</button>` : ''}`,
   });
 }
@@ -1724,11 +1727,21 @@ function prepareBackup() {
 
 function mountAfterRender(r) {
   if (r.name === 'settings') {
-    mountSignaturePad();
     fillSnapshotList();
     prepareBackup();
   }
   if (r.name === 'home' && needsBackup()) prepareBackup();
+}
+
+// The pad lives in its own sheet: drawn on the settings page, scrolling past
+// it with a finger could leave marks.
+function signatureSheet() {
+  openSheet(t('signature'), `<p class="hint">${esc(t('signatureHint'))}</p>
+    <canvas id="sigpad" class="sigpad" width="600" height="220"></canvas>
+    <div class="btn-row">
+      <button class="btn secondary" type="button" data-action="sigClear">${esc(t('clear'))}</button>
+      <button class="btn" type="button" data-action="sigSave">${esc(t('saveSignature'))}</button>
+    </div>`, () => mountSignaturePad());
 }
 
 let sigDirty = false;
@@ -1942,14 +1955,19 @@ const actions = {
     document.documentElement.lang = d.lang;
     render();
   },
+  sigOpen: () => signatureSheet(),
   sigClear: () => { const c = document.getElementById('sigpad'); c.getContext('2d').clearRect(0, 0, c.width, c.height); sigDirty = false; },
   sigSave: () => {
     if (!sigDirty) { toast(t('signatureEmpty')); return; }
     const data = document.getElementById('sigpad').toDataURL('image/png');
+    closeSheet();
     commit((s) => { s.settings.signature = data; });
     toast(t('saved'));
   },
-  sigRemove: () => commit((s) => { s.settings.signature = null; }),
+  sigRemove: () => {
+    if (!confirm(t('confirmRemoveSignature'))) return;
+    commit((s) => { s.settings.signature = null; });
+  },
   irlUpdate: async (d, el) => {
     el.disabled = true;
     try {

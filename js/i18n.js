@@ -314,6 +314,11 @@ const fr = {
   syncConflictBanner: 'Sauvegarde GitHub en pause : un autre téléphone a enregistré. Touchez pour choisir.',
   'syncErr_conflict': 'un autre téléphone a enregistré une sauvegarde',
   ghOlder: 'Versions plus anciennes',
+  // 1.3.2
+  signatureCardHint: 'Elle est ajoutée aux quittances, avis d\'échéance et courriers.',
+  noSignature: 'Pas encore de signature.',
+  addSignature: 'Ajouter une signature', changeSignature: 'Changer la signature',
+  confirmRemoveSignature: 'Retirer la signature des prochains documents ?',
 };
 
 const en = {
@@ -630,6 +635,11 @@ const en = {
   syncConflictBanner: 'GitHub backup paused: another phone has saved. Tap to choose.',
   'syncErr_conflict': 'another phone has saved a backup',
   ghOlder: 'Show older versions',
+  // 1.3.2
+  signatureCardHint: 'It is added to receipts, rent calls and letters.',
+  noSignature: 'No signature yet.',
+  addSignature: 'Add a signature', changeSignature: 'Change the signature',
+  confirmRemoveSignature: 'Remove the signature from future documents?',
 };
 
 const DICTS = { fr, en };

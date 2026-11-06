@@ -25,6 +25,7 @@
   - `files`: attached documents, as `{ name, type, data: ArrayBuffer }`.
   - `snapshots`: automatic copies, as `{ id, at, day, reason, counts, state }`.
 - **Rendering:** `js/app.js` builds HTML strings per route (`location.hash`, for example `#/lease/<id>`). Events are delegated through `data-action`, `data-form` and `data-change` attributes, dispatched to the `actions`, `forms` and `changes` objects. Later features add to these with `Object.assign(actions, {...})`. Every data change goes through `commit(fn)`, which saves, re-renders and calls `afterChange()` (backup scheduling and the daily snapshot).
+- **Lists that line up:** a list whose rows have a status column and an action column uses `<ul class="list cols">`, with exactly three cells per `li.row` (main, status, action; put an empty `<span>` when a row has no action). CSS subgrid then gives every row the same columns, whatever the language.
 
 ### Files
 | File | What it does |
@@ -79,6 +80,6 @@
 - **PDF fonts:** jsPDF's built-in Helvetica only has Windows-1252 letters. `pdfText()` (wrapped around `doc.text` and `doc.splitTextToSize` in `newDoc()`) simplifies other letters (Łukasz → Lukasz) instead of printing garbage. A full Unicode font is in the roadmap's Ideas.
 
 ## Current state (6 Nov 2026)
-- **Done:** milestones 1 to 4 (version 1.3.0, the owner's iPhone check passed) and version 1.3.1, fixes from a code review (iPhone check passed too). The GitHub backup is set up to the private repository `locatif-sauvegarde`.
+- **Done:** milestones 1 to 4 (version 1.3.0, the owner's iPhone check passed) version 1.3.1, fixes from a code review (iPhone check passed too), and version 1.3.2, screen polish (iPhone check pending). The GitHub backup is set up to the private repository `locatif-sauvegarde`.
 - **Next:** milestone 5, the import from Gestion Locative Facile. The owner will send the CSV export files from immobilierloyer.com, format only with names replaced. Build a review screen and a snapshot before importing, and bring in at least the 2025 and 2026 payment and rent history (see the roadmap).
 - **Waiting:** a bank CSV sample (milestone 6), and the legal check by the ADIL (three letters, plus the questions listed in the roadmap: guarantor statement under article 2297, which IRL value applies to a late revision, the late-deposit penalty).

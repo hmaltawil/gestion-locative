@@ -23,12 +23,18 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await page.fill('form[data-form=landlord] [name=postalCode]', '69003');
   await page.fill('form[data-form=landlord] [name=city]', 'Lyon');
   await page.click('form[data-form=landlord] button[type=submit]');
-  // signature
-  const c = await page.$('#sigpad'); await c.scrollIntoViewIfNeeded(); const b = await c.boundingBox();
+  // signature: no pad on the page itself (scrolling past it used to leave marks)
+  console.log('signature pad on the settings page:', await page.locator('#app #sigpad').count());
+  await page.click('[data-action=sigOpen]');
+  await page.waitForSelector('#sheet #sigpad');
+  await page.waitForTimeout(300);
+  const c = await page.$('#sheet #sigpad'); const b = await c.boundingBox();
   await page.mouse.move(b.x + 20, b.y + 50); await page.mouse.down();
   for (let i = 0; i < 20; i++) await page.mouse.move(b.x + 20 + i * 12, b.y + 50 + Math.sin(i) * 20);
   await page.mouse.up();
-  await page.click('[data-action=sigSave]');
+  await page.click('#sheet [data-action=sigSave]');
+  await page.waitForSelector('#app .sig-preview');
+  console.log('signature saved, sheet closed:', (await page.locator('#sheet').count()) === 0);
   await shot('02-settings');
 
   // property

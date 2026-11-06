@@ -110,6 +110,16 @@ Smaller:
 - [x] No zoom on the iPhone when choosing a lease in the bank import
 - [x] "Received this month" no longer counts the deposit kept at a departure as money received
 
+### ✅ Version 1.3.2 · Screen polish (6 Nov 2026)
+Asked for after using 1.3.1. iPhone check pending (see [Waiting](#waiting-on-you)).
+- [x] Home: the three amounts at the top line up, even when a label takes two lines
+- [x] Home rents, deadlines, the monthly send and the month-by-month list: statuses, amounts and buttons line up from row to row, in French and in English
+- [x] A late rent shows "Late" with the amount below it, like the other rows
+- [x] Signature: drawn in its own window, opened with "Add a signature", so scrolling Settings can no longer leave marks; removing it asks first
+- [x] Lists of properties, leases and expenses: no more blank line between a name and its details
+- [x] Dark mode: the text on blue buttons is dark, so it can be read
+- [x] Lease form: "Charges type" uses the full width, so its text isn't cut off
+
 ---
 
 ## Waiting on you
@@ -126,6 +136,11 @@ Smaller:
   - [x] "New version available" bar after an update
   - [x] Deadlines › Add to Calendar (fixed in 1.1.2)
   - [x] Choose a bank CSV file (works with Revolut; your real bank's file comes with milestone 6)
+- ⏳ **Check version 1.3.2 on the iPhone:** open the app, tap the "new version" bar, then try:
+  - [ ] Settings › About shows 1.3.2
+  - [ ] Home: the three amounts at the top, and the rents' statuses, amounts and Record/✓ column, line up
+  - [ ] Settings › Signature › Add a signature: draw, save, and scrolling Settings never draws
+  - [ ] In dark mode, the text on blue buttons is easy to read
 - ✅ **Version 1.3.1 checked on the iPhone** (6 Nov 2026)
   - [x] Settings › About shows 1.3.1
   - [x] A rent call from a lease page and from the monthly send show the same total
