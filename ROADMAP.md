@@ -4,6 +4,8 @@ One place to see what's done, what's waiting, and what comes next. Update it at 
 
 **Status:** ✅ done · 🔜 next · ⏳ waiting on someone · 💡 idea, not planned yet
 
+**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes) and screen polish (versions 1.3.2 and 1.3.3). All of it is live and checked on the iPhone. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL), in milestone 5 (payment history) and in the [Ideas](#ideas-backlog). **Next:** milestone 5, as soon as the Gestion Locative Facile export files arrive.
+
 ## How we work
 
 1. **One milestone at a time.** Each milestone is a version number (1.2, 1.3…) and a short list of features.
@@ -141,17 +143,17 @@ Code: [`0955f62`](https://github.com/hmaltawil/gestion-locative/commit/0955f62).
   - [x] "New version available" bar after an update
   - [x] Deadlines › Add to Calendar (fixed in 1.1.2)
   - [x] Choose a bank CSV file (works with Revolut; your real bank's file comes with milestone 6)
+- ✅ **Version 1.3.1 checked on the iPhone** (6 Nov 2026)
+  - [x] Settings › About shows 1.3.1
+  - [x] A rent call from a lease page and from the monthly send show the same total
+  - [x] Tax summary › line 230 can be saved
+  - [x] A guarantor agreement PDF: the statement to copy by hand and the signatures are on the same page
 - ✅ **Versions 1.3.2 and 1.3.3 checked on the iPhone** (6 Nov 2026)
   - [x] Settings › About shows 1.3.3
   - [x] Home: "1 715,01 €" in the tiles is as evenly spaced as the other amounts
   - [x] Home: the three amounts at the top, and the rents' statuses, amounts and Record/✓ column, line up
   - [x] Settings › Signature › Add a signature: draw, save, and scrolling Settings never draws
   - [x] In dark mode, the text on blue buttons is easy to read
-- ✅ **Version 1.3.1 checked on the iPhone** (6 Nov 2026)
-  - [x] Settings › About shows 1.3.1
-  - [x] A rent call from a lease page and from the monthly send show the same total
-  - [x] Tax summary › line 230 can be saved
-  - [x] A guarantor agreement PDF: the statement to copy by hand and the signatures are on the same page
 - ⏳ **Legal check, done once:** have the guarantor agreement, formal notice and deposit return letter reviewed, for example by your local ADIL. Questions to ask:
   - Guarantor agreement: since 2022 (article 2297 of the Civil Code), is the handwritten statement now complete (amount in figures and words; for a joint guarantee, the acknowledgment that the landlord need not pursue the tenant first)?
   - Rent revision claimed late: which IRL value applies, the latest published on the anniversary date or the latest published on the day of the request? Today the app uses the latest available on the day you tap, so with an anniversary just before INSEE publishes, a few days' difference changes the index used. Once answered, the app can follow the rule.
