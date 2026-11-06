@@ -84,10 +84,22 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await page.click('[data-action=addTenantRow]');
   await page.locator('[name=tenant_name]').nth(1).fill('Luc Petit');
   await page.fill('[name=startDate]', '2026-08-16');
-  await page.fill('[name=rent]', '520,50');
+  await page.fill('[name=rent]', '502,50'); // typing mistake, corrected below
   await page.fill('[name=charges]', '40');
   await page.click('form[data-form=lease] button[type=submit]');
   await page.waitForURL(/#\/lease\//);
+  // correct the rent from the lease's edit form (the confirmation is accepted)
+  await page.click('.topbar a.link');
+  await page.waitForSelector('form[data-form=lease] [name=rent]');
+  console.log('edit form shows the rent:', await page.inputValue('form[data-form=lease] [name=rent]'));
+  await page.fill('form[data-form=lease] [name=rent]', '520,50');
+  await page.click('form[data-form=lease] button[type=submit]');
+  await page.waitForURL(/#\/lease\//);
+  await page.waitForTimeout(200);
+  const corrected = await page.textContent('.subtitle');
+  console.log('after correcting:', corrected.replace(/\s+/g, ' ').trim());
+  if (!corrected.includes('520,50')) throw new Error('rent not corrected: ' + corrected);
+  console.log('rent history entries:', await page.locator('.list.compact li').count());
 
   await nav('#/');
   await page.waitForSelector('.tiles');

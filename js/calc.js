@@ -27,6 +27,24 @@ export function currentRent(lease, today) {
   return rentAt(lease, periodOf(today));
 }
 
+// The rent entry the lease form edits: the one in force today (or on the last
+// day of an ended lease). Correcting it fixes a typing mistake; a real change
+// from a given month is a new entry ("Change rent").
+export function rentEntryToCorrect(lease, today) {
+  if (!(lease.rents || []).length) return null;
+  const day = lease.endDate && lease.endDate < today ? lease.endDate : today;
+  return rentAt(lease, periodOf(day));
+}
+
+// The lease's rents with that entry's amounts replaced; the rest of the
+// history (earlier amounts, revisions, later changes) is kept.
+export function correctRent(lease, today, rent, charges) {
+  const entry = rentEntryToCorrect(lease, today);
+  const fixed = entry ? { ...entry, rent, charges } : { from: periodOf(lease.startDate), rent, charges, reason: 'initial' };
+  return [...sortedRents(lease).filter((r) => r.from !== fixed.from), fixed]
+    .sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0));
+}
+
 // Amount due for one month, pro-rated for the first and last month.
 export function dueForPeriod(lease, period) {
   const r = rentAt(lease, period);

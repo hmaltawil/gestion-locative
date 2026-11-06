@@ -4,7 +4,7 @@ One place to see what's done, what's waiting, and what comes next. Update it at 
 
 **Status:** ✅ done · 🔜 next · ⏳ waiting on someone · 💡 idea, not planned yet
 
-**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes) and screen polish (versions 1.3.2 and 1.3.3). All of it is live and checked on the iPhone. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL), in milestone 5 (payment history) and in the [Ideas](#ideas-backlog). **Next:** milestone 5, as soon as the Gestion Locative Facile export files arrive; then milestone 6 with sample files from CIC and Crédit Agricole.
+**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3) and a fix from real use (version 1.3.4: correcting a lease's rent). All of it is live; 1.3.4 still needs its iPhone check. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL), in milestone 5 (payment history) and in the [Ideas](#ideas-backlog). **Next:** milestone 5, as soon as the Gestion Locative Facile export files arrive; then milestone 6 with sample files from CIC and Crédit Agricole.
 
 ## How we work
 
@@ -127,6 +127,10 @@ Code: [`0955f62`](https://github.com/hmaltawil/gestion-locative/commit/0955f62).
 
 - [x] Big amounts (the home tiles, the balance on a lease) use normal digit spacing: equal-width digits left gaps around every "1" (1 715,01 €). Lists keep equal-width digits so the amounts in a column line up
 
+### ✅ Version 1.3.4 · Fix from real use (6 Nov 2026)
+iPhone check pending (see [Waiting](#waiting-on-you)).
+- [x] Editing a lease: the rent and charges can be corrected (a typing mistake). The form shows the amounts in force today, asks before changing what every month since then owes, and keeps the history of earlier amounts and revisions. A real change from a given month still goes through "Change rent"
+
 ---
 
 ## Waiting on you
@@ -154,6 +158,9 @@ Code: [`0955f62`](https://github.com/hmaltawil/gestion-locative/commit/0955f62).
   - [x] Home: the three amounts at the top, and the rents' statuses, amounts and Record/✓ column, line up
   - [x] Settings › Signature › Add a signature: draw, save, and scrolling Settings never draws
   - [x] In dark mode, the text on blue buttons is easy to read
+- ⏳ **Check version 1.3.4 on the iPhone:** open the app, tap the "new version" bar, then try:
+  - [ ] Settings › About shows 1.3.4
+  - [ ] A lease › Edit: the rent and charges show the amounts in force; change one, save, confirm, and the lease page shows the new amount
 - ⏳ **Legal check, done once:** have the guarantor agreement, formal notice and deposit return letter reviewed, for example by your local ADIL. Questions to ask:
   - Guarantor agreement: since 2022 (article 2297 of the Civil Code), is the handwritten statement now complete (amount in figures and words; for a joint guarantee, the acknowledgment that the landlord need not pursue the tenant first)?
   - Rent revision claimed late: which IRL value applies, the latest published on the anniversary date or the latest published on the day of the request? Today the app uses the latest available on the day you tap, so with an anniversary just before INSEE publishes, a few days' difference changes the index used. Once answered, the app can follow the rule.

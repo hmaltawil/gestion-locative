@@ -168,3 +168,22 @@ test('month overview: the deposit applied at departure is not money received', a
   ] };
   assert.equal(monthOverview(state, '2026-11-10').received, 50000);
 });
+
+test('lease form: correcting the rent fixes the amount in force and keeps the history', async () => {
+  const { correctRent, rentEntryToCorrect } = await import('../js/calc.js');
+  // never changed: the one amount is corrected
+  const one = { startDate: '2026-08-16', rents: [{ from: '2026-08', rent: 52050, charges: 4000, reason: 'initial' }] };
+  assert.deepEqual(correctRent(one, '2026-11-06', 53000, 4000), [{ from: '2026-08', rent: 53000, charges: 4000, reason: 'initial' }]);
+  // with a revision: the revised amount (in force today) is corrected, the first one kept
+  const two = { startDate: '2024-01-01', rents: [
+    { from: '2024-01', rent: 60000, charges: 5000, reason: 'initial' },
+    { from: '2026-01', rent: 62000, charges: 5000, reason: 'indexation' },
+    { from: '2027-01', rent: 62000, charges: 6000, reason: 'manual' }, // a change planned later stays
+  ] };
+  assert.equal(rentEntryToCorrect(two, '2026-11-06').from, '2026-01');
+  assert.deepEqual(correctRent(two, '2026-11-06', 61900, 5000).map((r) => [r.from, r.rent, r.charges, r.reason]),
+    [['2024-01', 60000, 5000, 'initial'], ['2026-01', 61900, 5000, 'indexation'], ['2027-01', 62000, 6000, 'manual']]);
+  // a lease that ended: the amount at its end; one starting later: its first amount
+  assert.equal(rentEntryToCorrect({ ...two, endDate: '2025-06-30' }, '2026-11-06').from, '2024-01');
+  assert.equal(rentEntryToCorrect({ startDate: '2027-02-01', rents: [{ from: '2027-02', rent: 1, charges: 0 }] }, '2026-11-06').from, '2027-02');
+});

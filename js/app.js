@@ -3,7 +3,8 @@ import {
   periodOf, todayStr, uid, addDays,
 } from './util.js';
 import {
-  currentRent, dueDateFor, indexationStatus, isActive, ledger, monthOverview, rentAt, rentCallBalance, sortedRents,
+  correctRent, currentRent, dueDateFor, indexationStatus, isActive, ledger, monthOverview, rentAt, rentCallBalance, rentEntryToCorrect,
+  sortedRents,
 } from './calc.js';
 import { fetchInseeIrl, fmtIrlKey, irlKey, irlTable, latestIrlKey } from './irl.js';
 import {
@@ -26,7 +27,7 @@ import { buildIcs, deadlines, defaultExpiry } from './deadlines.js';
 import { anonymize } from './support.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.3.3';
+export const APP_VERSION = '1.3.4';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -542,6 +543,8 @@ function viewLeaseForm(r) {
   const latest = latestIrlKey(table);
   const years = [];
   for (let y = Number(latest.slice(0, 4)); y >= 2015; y--) years.push([y, y]);
+  // Editing an existing lease: its rent and charges in force today.
+  const entry = isNew ? null : rentEntryToCorrect(l, td);
   const irlQ = l.irl ? l.irl.quarter : '';
   const irlY = l.irl && l.irl.key ? l.irl.key.slice(0, 4) : '';
   return page({
@@ -562,10 +565,11 @@ function viewLeaseForm(r) {
           ${field(t('startDate'), input('startDate', l.startDate, `type="date" required${isNew ? ' data-change="leaseStart"' : ''}`))}
           ${field(t('endDate'), input('endDate', l.endDate, 'type="date"'), t('endDateHint'))}
         </div>
-        ${isNew ? `<div class="grid2">
-          ${moneyField(t('rentHC'), 'rent', null, '', 'required')}
-          ${moneyField(t('charges'), 'charges', 0)}
-        </div>` : `<p class="hint">${esc(t('rentEditHint'))}</p>`}
+        <div class="grid2">
+          ${moneyField(t('rentHC'), 'rent', entry ? entry.rent : null, '', 'required')}
+          ${moneyField(t('charges'), 'charges', entry ? entry.charges : 0)}
+        </div>
+        ${entry ? `<p class="hint">${esc(t('rentCorrectHint', { from: fmtPeriod(entry.from, state.settings.lang) }))}</p>` : ''}
         ${field(t('chargesType'), select('chargesType', [['provision', t('chargesProvision')], ['forfait', t('chargesForfait')]], l.chargesType))}
         <div class="grid2">
           ${field(t('paymentDay'), input('paymentDay', l.paymentDay || 1, 'type="number" min="1" max="28" inputmode="numeric"'))}
@@ -2121,9 +2125,20 @@ const forms = {
       notes: f.get('notes').trim(),
     };
     // Unfurnished lease: the deposit is at most one month's rent excluding charges.
-    const rentHC = existing ? currentRent(existing, today()).rent : parseMoney(f.get('rent'));
+    const rentHC = parseMoney(f.get('rent'));
     if (rentHC > 0 && data.deposit > rentHC && data.deposit !== (existing && existing.deposit)
       && !confirm(t('depositAboveCap', { max: fmtMoney(rentHC) }))) return;
+    // A corrected rent or charges amount (typing mistake) on an existing lease.
+    let correction = null;
+    if (existing) {
+      if (rentHC === null) { toast(t('rentMissing'), 'error'); return; }
+      const charges = parseMoney(f.get('charges')) || 0;
+      const entry = rentEntryToCorrect(existing, today());
+      if (!entry || entry.rent !== rentHC || entry.charges !== charges) {
+        if (entry && !confirm(t('confirmRentCorrect', { from: fmtPeriod(entry.from, state.settings.lang) }))) return;
+        correction = { rent: rentHC, charges };
+      }
+    }
     if (!existing) {
       const rent = parseMoney(f.get('rent'));
       if (rent === null) { toast(t('rentMissing'), 'error'); return; }
@@ -2144,6 +2159,7 @@ const forms = {
         if (rents.length && rents[0].from > periodOf(startDate)) rents[0] = { ...rents[0], from: periodOf(startDate) };
         merged.rents = rents;
         if (merged.trackFrom && merged.trackFrom < periodOf(startDate)) merged.trackFrom = periodOf(startDate);
+        if (correction) merged.rents = correctRent(merged, today(), correction.rent, correction.charges);
         s.leases[i] = merged;
       } else s.leases.push(data);
     });
