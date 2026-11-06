@@ -4,7 +4,7 @@ One place to see what's done, what's waiting, and what comes next. Update it at 
 
 **Status:** ✅ done · 🔜 next · ⏳ waiting on someone · 💡 idea, not planned yet
 
-**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes) and screen polish (versions 1.3.2 and 1.3.3). All of it is live and checked on the iPhone. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL), in milestone 5 (payment history) and in the [Ideas](#ideas-backlog). **Next:** milestone 5, as soon as the Gestion Locative Facile export files arrive.
+**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes) and screen polish (versions 1.3.2 and 1.3.3). All of it is live and checked on the iPhone. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL), in milestone 5 (payment history) and in the [Ideas](#ideas-backlog). **Next:** milestone 5, as soon as the Gestion Locative Facile export files arrive; then milestone 6 with sample files from CIC and Crédit Agricole.
 
 ## How we work
 
@@ -134,7 +134,7 @@ Code: [`0955f62`](https://github.com/hmaltawil/gestion-locative/commit/0955f62).
 - ✅ **GitHub backup set up** (5 Nov 2026) to the private repository `locatif-sauvegarde`. Passphrase on paper; revoke the token on GitHub if the phone is lost.
 - ⏳ **Optional, fewer permission prompts for Claude:** add `.claude/settings.json` to this repository yourself (Claude isn't allowed to change its own permissions).
 - ⏳ **Gestion Locative Facile export files** (format only, names replaced), for milestone 5. On a computer: log in at immobilierloyer.com, tick Outils › Préférences › Réglages › Réglages avancés › "Export des données", then use **Exporter** on each page. Export before cancelling the subscription.
-- ⏳ **Bank CSV sample** (account numbers removed) and the bank's name, to tune the import. This is milestone 6. It's exported from the bank's website, not the monthly PDF statement.
+- ⏳ **Bank file samples** for milestone 6. The banks are **CIC** and **Crédit Agricole** (6 Nov 2026). One export from each, from the bank's website (not the monthly PDF statement): CSV if offered, otherwise Excel or OFX. Remove the account numbers and replace tenants' names before sending (this repository is public).
 - ✅ **First check on the real iPhone:** everything works (5 Nov 2026)
   - [x] Add to Home Screen, then open from the icon
   - [x] Share menu: send a receipt by Mail
@@ -175,9 +175,10 @@ Goal: no retyping of the 15 leases.
 - [ ] Bring in at least the 2025 and 2026 payment and rent history (found in the review): leases already running are tracked from the current month with today's rent, so without it the 2026 tax summary and the 2025 charges reconciliation would be wrong for those leases
 
 ### Milestone 6 · Version 1.5 · Bank import and semi-automatic follow-up
-Waiting for your bank's CSV sample.
+Waiting for a sample export from CIC and from Crédit Agricole.
 Goal: a monthly routine of about 5 minutes. Download the bank file, import it, then tap through receipts and reminders.
-- [ ] Adapt column and date detection to your bank's export (support OFX or Excel too, if your bank has no CSV)
+- [ ] Adapt column and date detection to the CIC and Crédit Agricole exports (support OFX or Excel too, if CSV isn't offered)
+- [ ] Two accounts: rent can arrive at either bank, so both files are read the same way, and a transfer imported from one never doubles one from the other
 - [ ] Optionally import money going out as expenses, with a suggested category
 - [ ] Remember "this label always means this lease or this expense category"
 - [ ] Handle the CAF paying part of the rent directly to you
@@ -228,4 +229,4 @@ Goal: a monthly routine of about 5 minutes. Download the bank file, import it, t
 - The tax summary is a guide; check it against that year's form 2044 instructions
 - Diagnostic validity rules are simplified (older DPEs have special rules); expiry dates can be edited
 - Exporting to the Calendar again creates duplicate events unless the old ones are deleted first
-- The bank import is generic until it's tuned to your bank
+- The bank import is generic until it's tuned to CIC and Crédit Agricole (milestone 6)

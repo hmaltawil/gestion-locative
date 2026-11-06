@@ -82,4 +82,4 @@
 ## Current state (6 Nov 2026)
 - **Done:** milestones 1 to 4 (version 1.3.0), version 1.3.1 (fixes from a code review) and versions 1.3.2 and 1.3.3 (screen polish). The owner's iPhone check passed for all of them. The GitHub backup is set up to the private repository `locatif-sauvegarde`.
 - **Next:** milestone 5, the import from Gestion Locative Facile. The owner will send the CSV export files from immobilierloyer.com, format only with names replaced. Build a review screen and a snapshot before importing, and bring in at least the 2025 and 2026 payment and rent history (see the roadmap).
-- **Waiting:** a bank CSV sample (milestone 6), and the legal check by the ADIL (three letters, plus the questions listed in the roadmap: guarantor statement under article 2297, which IRL value applies to a late revision, the late-deposit penalty).
+- **Waiting:** sample exports from the owner's two banks, CIC and Crédit Agricole (milestone 6), and the legal check by the ADIL (three letters, plus the questions listed in the roadmap: guarantor statement under article 2297, which IRL value applies to a late revision, the late-deposit penalty).
