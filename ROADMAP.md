@@ -120,6 +120,9 @@ Asked for after using 1.3.1. iPhone check pending (see [Waiting](#waiting-on-you
 - [x] Dark mode: the text on blue buttons is dark, so it can be read
 - [x] Lease form: "Charges type" uses the full width, so its text isn't cut off
 
+### ✅ Version 1.3.3 · Fix from the 1.3.2 iPhone check (6 Nov 2026)
+- [x] Big amounts (the home tiles, the balance on a lease) use normal digit spacing: equal-width digits left gaps around every "1" (1 715,01 €). Lists keep equal-width digits so the amounts in a column line up
+
 ---
 
 ## Waiting on you
@@ -136,8 +139,9 @@ Asked for after using 1.3.1. iPhone check pending (see [Waiting](#waiting-on-you
   - [x] "New version available" bar after an update
   - [x] Deadlines › Add to Calendar (fixed in 1.1.2)
   - [x] Choose a bank CSV file (works with Revolut; your real bank's file comes with milestone 6)
-- ⏳ **Check version 1.3.2 on the iPhone:** open the app, tap the "new version" bar, then try:
-  - [ ] Settings › About shows 1.3.2
+- ⏳ **Check versions 1.3.2 and 1.3.3 on the iPhone:** open the app, tap the "new version" bar, then try:
+  - [ ] Settings › About shows 1.3.3
+  - [ ] Home: "1 715,01 €" in the tiles is as evenly spaced as the other amounts
   - [ ] Home: the three amounts at the top, and the rents' statuses, amounts and Record/✓ column, line up
   - [ ] Settings › Signature › Add a signature: draw, save, and scrolling Settings never draws
   - [ ] In dark mode, the text on blue buttons is easy to read

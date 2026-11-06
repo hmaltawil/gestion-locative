@@ -26,7 +26,7 @@ import { buildIcs, deadlines, defaultExpiry } from './deadlines.js';
 import { anonymize } from './support.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.3.2';
+export const APP_VERSION = '1.3.3';
 
 let state = emptyState();
 const root = document.getElementById('app');
