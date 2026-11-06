@@ -68,13 +68,21 @@ Code: [`66c21b7`](https://github.com/hmaltawil/gestion-locative/commit/66c21b7)
 - [x] Backup status in Settings, home warnings when the GitHub backup fails or the token is about to expire
 - [x] One-tap manual backup (the file is prepared in the background)
 
+### ✅ Milestone 4 · Version 1.3 · Handover and support (6 Nov 2026)
+Built before the import because the import was waiting for the export files.
+- [x] Each connected device has a role: **main phone** (saves backups) or **support copy** (read-only)
+- [x] Support copy: restores the user's latest GitHub backup, shows a bar on every screen, never uploads, "Refresh from GitHub" gets the newest version
+- [x] Anonymised support file: names, contact details, addresses, notes and bank labels replaced; amounts and dates kept; restorable in a test browser (with a warning)
+- [x] Handover checklist in Settings › Handover and support
+- [x] Browser tests saved in `tests/e2e/` (see CLAUDE.md)
+
 ---
 
 ## Waiting on you
 
 - ✅ **GitHub backup set up** (5 Nov 2026) to the private repository `locatif-sauvegarde`. Passphrase on paper; revoke the token on GitHub if the phone is lost.
 - ⏳ **Optional, fewer permission prompts for Claude:** add `.claude/settings.json` to this repository yourself (Claude isn't allowed to change its own permissions).
-- ⏳ **Gestion Locative Facile export files** (format only, names replaced), for milestone 4. On a computer: log in at immobilierloyer.com, tick Outils › Préférences › Réglages › Réglages avancés › "Export des données", then use **Exporter** on each page. Export before cancelling the subscription.
+- ⏳ **Gestion Locative Facile export files** (format only, names replaced), for milestone 5. On a computer: log in at immobilierloyer.com, tick Outils › Préférences › Réglages › Réglages avancés › "Export des données", then use **Exporter** on each page. Export before cancelling the subscription.
 - ⏳ **Bank CSV sample** (account numbers removed) and the bank's name, to tune the import. This is milestone 6. It's exported from the bank's website, not the monthly PDF statement.
 - ✅ **First check on the real iPhone:** everything works (5 Nov 2026)
   - [x] Add to Home Screen, then open from the icon
@@ -90,7 +98,7 @@ Code: [`66c21b7`](https://github.com/hmaltawil/gestion-locative/commit/66c21b7)
 
 ## Next
 
-### 🔜 Milestone 4 · Version 1.3 · Import from Gestion Locative Facile
+### 🔜 Milestone 5 · Version 1.4 · Import from Gestion Locative Facile
 Waiting for the CSV export files (format only, with names replaced). Decided 6 Nov 2026.
 Goal: no retyping of the 15 leases.
 - [ ] Read the CSV files exported from immobilierloyer.com (Locataires, Contrats, Loyers et paiements, Charges et frais, Biens if offered)
@@ -99,13 +107,6 @@ Goal: no retyping of the 15 leases.
 - [ ] A review screen before confirming: what will be created, anything that couldn't be read
 - [ ] A snapshot before the import, so it can be undone in one tap
 - [ ] The import runs on the iPhone: the real files never leave it
-
-### Milestone 5 · Version 1.4 · Handover and support
-Decided 6 Nov 2026. You set everything up and check it, then hand it to the person who will use it, and can still help when something goes wrong.
-- [ ] **Handover:** the user's iPhone restores your finished setup from the GitHub backup, then becomes the only phone that saves to it
-- [ ] **Support copy (read-only):** open the latest GitHub backup on your own phone or computer to see exactly what the user sees, without ever saving over their data
-- [ ] **Anonymised support file:** exports the data with names, emails, phone numbers and addresses replaced, safe to share with Claude when investigating a problem
-- [ ] A short handover checklist (passphrase on paper, own token per phone, what to do if the phone is lost)
 
 ### Milestone 6 · Version 1.5 · Bank import and semi-automatic follow-up
 Waiting for your bank's CSV sample.

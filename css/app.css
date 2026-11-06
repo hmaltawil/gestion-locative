@@ -328,3 +328,10 @@ fieldset.card:disabled { opacity: .75; }
 .row.tight { padding: 8px 0; }
 .btn-row.spaced-top { margin-top: 10px; justify-content: space-between; }
 #sync-status p { margin-bottom: 8px; }
+
+/* v1.3 support copy */
+.support-bar {
+  position: sticky; top: 0; z-index: 6; background: var(--warn-soft); color: var(--warn);
+  font-size: 13px; text-align: center; padding: calc(env(safe-area-inset-top) + 6px) 12px 6px;
+}
+.support-bar + .topbar { padding-top: 6px; top: 0; }

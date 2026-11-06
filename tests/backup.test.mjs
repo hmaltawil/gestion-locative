@@ -132,3 +132,26 @@ test('sync: upload, update with stale sha, versions and reading an old version',
   assert.equal(await readFile(cfg, DATA_PATH, versions[1].sha), 'v1');
   assert.equal(await readFile(cfg, 'backup/missing.enc'), null);
 });
+
+test('anonymised support file keeps numbers, removes personal details', async () => {
+  const { anonymize } = await import('../js/support.js');
+  const st = {
+    settings: { landlord: { name: 'Marie Dupont', address: '12 rue des Lilas', postalCode: '69003', city: 'Lyon', email: 'marie@x.fr', phone: '0601' }, signature: 'data:image/png;base64,AAA' },
+    properties: [{ id: 'P1', name: 'Appartement Gambetta', address: '5 cours Gambetta', city: 'Lyon', notes: 'code porte 1234' }],
+    leases: [{ id: 'L1', propertyId: 'P1', tenants: [{ name: 'Jean Martin', email: 'jean@x.fr', phone: '0612' }], guarantor: 'Paul Martin, 3 place Bellecour', notes: 'gentil', rents: [{ from: '2026-01', rent: 75000, charges: 6000 }], departure: { newAddress: '9 rue Neuve' }, adjustments: [{ kind: 'other', label: 'Vitre cassée par Jean', amount: 5000 }] }],
+    payments: [{ id: 'x', leaseId: 'L1', amount: 81000, date: '2026-01-05', note: 'Jean', bankLabel: 'VIR DE M JEAN MARTIN', bankRef: '2026|81000|VIR DE M JEAN MARTIN' }],
+    expenses: [{ id: 'e', amount: 12000, description: 'Plombier Durand' }],
+    reminders: [{ id: 'r', title: 'Appeler Jean' }],
+    documents: [{ id: 'd', name: 'bail-jean-martin.pdf' }],
+  };
+  const out = anonymize(st);
+  const text = JSON.stringify(out);
+  for (const secret of ['Marie', 'Dupont', 'Lilas', 'Jean', 'Martin', 'Gambetta', 'Bellecour', '1234', 'Durand', 'gentil', 'Neuve', '0601', '0612', 'base64']) {
+    assert.ok(!text.includes(secret), secret);
+  }
+  assert.equal(out.payments[0].amount, 81000);
+  assert.equal(out.leases[0].rents[0].rent, 75000);
+  assert.equal(out.documents[0].name, 'document-1.pdf');
+  assert.equal(out.anonymised, true);
+  assert.equal(st.leases[0].tenants[0].name, 'Jean Martin'); // original untouched
+});

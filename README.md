@@ -2,7 +2,7 @@
 
 A rental management web app for a private landlord in France. It works offline, can be added to an iPhone home screen, and shows its screens in French or English. The PDF documents are always in French.
 
-What's done and what's planned: see [ROADMAP.md](ROADMAP.md).
+What's done and what's planned: see [ROADMAP.md](ROADMAP.md). Notes for developers and AI assistants: [CLAUDE.md](CLAUDE.md).
 
 ## What it does
 
@@ -27,6 +27,7 @@ What's done and what's planned: see [ROADMAP.md](ROADMAP.md).
 - **Deadlines:** rent revisions, tenant insurance, diagnostic reports, lease term and notice dates, deposit return, charges reconciliation and your own reminders. Shown on the home screen and exportable to the iPhone Calendar as a .ics file.
 - **Diagnostic reports:** per property, with expiry dates filled in automatically.
 - **Documents:** photos and PDFs attached to properties, leases or expenses. Photos are resized, and everything is included in the backup.
+- **Handover and support:** each device connected to the GitHub backup is either the **main phone** (saves) or a **support copy** (read-only, for looking at the user's data). There's also an anonymised support file and a handover checklist in Settings.
 - **Tenant departure:** deposit return with deductions, unpaid rent, up to 20% held back for buildings with shared accounts, the 1- or 2-month legal deadline and the late penalty.
 
 ## Where the data lives
@@ -64,6 +65,7 @@ The app is a static site with no build step. To publish it, go to the repository
 ```bash
 npm test          # calculation tests (Node 18+)
 npm run serve     # http://localhost:8080
+npm run e2e       # browser tests (Playwright), with the server running
 ```
 
 ### Files

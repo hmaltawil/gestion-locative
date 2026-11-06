@@ -23,9 +23,10 @@ import { guessMapping, knownLabels, parseCsv, suggestLease, toTransactions } fro
 import { departureStatement, recoverableExpenses, regularization } from './charges.js';
 import { LINE_2044, taxSummary, yearCsv } from './tax.js';
 import { buildIcs, deadlines, defaultExpiry } from './deadlines.js';
+import { anonymize } from './support.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.3.0';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -220,7 +221,7 @@ function render() {
   };
   const view = views[r.name] || viewHome;
   const scroll = root.dataset.route === location.hash ? window.scrollY : 0;
-  root.innerHTML = view(r) + tabbar(TAB_OF[r.name] || 'home');
+  root.innerHTML = (isViewer() ? `<div class="support-bar">${esc(t('supportBar'))}</div>` : '') + view(r) + tabbar(TAB_OF[r.name] || 'home');
   root.dataset.route = location.hash;
   window.scrollTo(0, scroll);
   mountAfterRender(r);
@@ -230,6 +231,7 @@ function render() {
 
 function needsBackup() {
   if (!state.leases.length && !state.properties.length) return false;
+  if (isViewer()) return false;
   const weekAgo = addDays(today(), -7);
   const m = gh() ? syncMeta() : null;
   if (m && m.lastOk && m.lastOk.slice(0, 10) >= weekAgo) return false; // the GitHub backup is working
@@ -725,6 +727,7 @@ function viewSettings() {
         <p class="hint">${esc(t('dataCounts', { p: state.properties.length, l: state.leases.length, pay: state.payments.length, e: state.expenses.length }))} · ${esc(t('docCount', { n: state.documents.length }))}</p>
       </section>
       ${snapshotsCard()}
+      ${handoverCard()}
       <section class="card">
         <h3>${esc(t('about'))}</h3>
         <p class="hint">${esc(t('aboutText', { v: APP_VERSION }))}</p>
@@ -1373,6 +1376,8 @@ let prepared = null; // a manual backup file ready to share in one tap: { blob, 
 let lastDailyDay = null;
 
 const gh = () => (secrets.github && secrets.github.token ? secrets.github : null);
+// A "support copy" device reads the GitHub backup but never saves to it.
+const isViewer = () => !!(gh() && gh().mode === 'viewer');
 const syncMeta = () => (secrets.sync = secrets.sync || {});
 const hasData = (s = state) => s.properties.length > 0 || s.leases.length > 0;
 
@@ -1458,7 +1463,7 @@ let syncing = false;
 let syncAgain = false;
 
 function markDirty() {
-  if (!gh()) return;
+  if (!gh() || isViewer()) return;
   syncMeta().dirty = true;
   saveSecrets(secrets).catch(() => {});
   scheduleSync();
@@ -1472,7 +1477,7 @@ function scheduleSync(delay = 8000) {
 
 async function runSync() {
   const g = gh();
-  if (!g) return;
+  if (!g || g.mode === 'viewer') return;
   if (syncing) { syncAgain = true; return; }
   syncing = true;
   syncAgain = false;
@@ -1521,6 +1526,7 @@ async function runSync() {
 function syncStatusHtml(running) {
   if (!gh()) return '';
   const m = syncMeta();
+  if (isViewer()) return `<p>${esc(m.lastRefresh ? t('supportStatus', { date: fmtDateTime(m.lastRefresh) }) : t('supportNever'))}</p>`;
   let h = `<p>${esc(m.lastOk ? t('syncLastOk', { date: fmtDateTime(m.lastOk) }) : t('syncNever'))}</p>`;
   if (running) h += `<p class="muted small">${esc(t('syncRunning'))}</p>`;
   else if (m.lastError) h += `<p class="note warn">${esc(t('syncFailed', { reason: t('syncErr_' + m.lastError) }))}</p>`;
@@ -1537,7 +1543,7 @@ function safetyBanners() {
   if (!g) return '';
   const m = syncMeta();
   let out = '';
-  if (m.lastError && (!m.lastOk || m.lastOk.slice(0, 10) < addDays(today(), -2))) {
+  if (!isViewer() && m.lastError && (!m.lastOk || m.lastOk.slice(0, 10) < addDays(today(), -2))) {
     out += `<a class="banner warn" href="#/settings">${esc(t('syncFailingBanner', { reason: t('syncErr_' + m.lastError) }))}</a>`;
   }
   if (g.tokenExpires && g.tokenExpires <= addDays(today(), 14)) {
@@ -1551,10 +1557,12 @@ function githubCard() {
   if (g) {
     return `<section class="card">
       <h3>${esc(t('ghTitle'))}</h3>
-      <p>${esc(t('ghConnectedTo', { repo: g.repo }))}${g.tokenExpires ? ` <span class="muted small">· ${esc(t('ghTokenUntil', { date: fmtDate(g.tokenExpires) }))}</span>` : ''}</p>
+      <p>${esc(t('ghConnectedTo', { repo: g.repo }))} · <strong>${esc(t(isViewer() ? 'ghModeViewer' : 'ghModeMain'))}</strong>${g.tokenExpires ? ` <span class="muted small">· ${esc(t('ghTokenUntil', { date: fmtDate(g.tokenExpires) }))}</span>` : ''}</p>
       <div id="sync-status">${syncStatusHtml(syncing)}</div>
       <div class="btn-row">
-        <button class="btn" data-action="syncNow">${esc(t('syncNow'))}</button>
+        ${isViewer()
+          ? `<button class="btn" data-action="supportRefresh">${esc(t('supportRefresh'))}</button>`
+          : `<button class="btn" data-action="syncNow">${esc(t('syncNow'))}</button>`}
         <button class="btn secondary" data-action="ghRestore">${esc(t('ghRestore'))}</button>
       </div>
       <div class="btn-row spaced-top">
@@ -1575,6 +1583,7 @@ function githubCard() {
       </ol>
     </details>
     <form class="form" data-form="ghConnect">
+      ${field(t('ghMode'), select('mode', [['main', t('ghModeMain')], ['viewer', t('ghModeViewer')]], 'main'), t('ghModeHint'))}
       ${field(t('ghRepo'), input('repo', '', `required autocomplete="off" autocapitalize="off" placeholder="${esc(t('ghRepoPh'))}"`))}
       ${field(t('ghToken'), input('token', '', 'type="password" required autocomplete="off"'), t('ghTokenHint'))}
       ${field(t('ghTokenExpires'), input('tokenExpires', '', 'type="date"'), t('ghTokenExpiresHint'))}
@@ -1639,6 +1648,7 @@ async function ghRestoreVersion(sha) {
     m.dataSha = await getSha(cfg, DATA_PATH);
     m.uploadedDocs = next.documents.map((d) => d.id);
     m.lastError = null;
+    m.lastRefresh = new Date().toISOString();
     await saveSecrets(secrets);
     setLang(state.settings.lang);
     applyTheme(state.settings.theme);
@@ -1659,6 +1669,17 @@ function ghTokenSheet() {
     ${field(t('ghTokenExpires'), input('tokenExpires', '', 'type="date"'), t('ghTokenExpiresHint'))}
     <button class="btn block" type="submit">${esc(t('save'))}</button>
   </form>`);
+}
+
+function handoverCard() {
+  return `<section class="card">
+    <h3>${esc(t('handoverTitle'))}</h3>
+    <details><summary>${esc(t('handoverHow'))}</summary>
+      <ol class="steps small">${[1, 2, 3, 4, 5, 6].map((i) => `<li>${esc(t('handover' + i))}</li>`).join('')}</ol>
+    </details>
+    <p class="hint">${esc(t('supportExportHint'))}</p>
+    <button class="btn secondary" data-action="supportExport">${esc(t('supportExport'))}</button>
+  </section>`;
 }
 
 // One tap is enough to back up when the file is already prepared.
@@ -1946,6 +1967,7 @@ const actions = {
       if (!file) return;
       try {
         const { state: next, files } = parseBackup(await file.text());
+        if (next.anonymised && !confirm(t('confirmRestoreAnon'))) return;
         const msg = t('confirmRestore', { p: next.properties.length, l: next.leases.length, pay: next.payments.length });
         if (!confirm(msg)) return;
         await takeSnapshot('beforeRestore');
@@ -2570,6 +2592,20 @@ Object.assign(changes, {
 
 Object.assign(actions, {
   snapRestore: (d) => { restoreSnapshot(d.id); },
+  supportExport: () => {
+    const data = { app: 'gestion-locative', exportedAt: new Date().toISOString(), appVersion: APP_VERSION, ...anonymize(state), files: {} };
+    shareFile(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }), `gestion-locative-support-anonyme-${today()}.json`, 'application/json');
+  },
+  supportRefresh: async () => {
+    const g = gh();
+    try {
+      const versions = await listVersions({ repo: g.repo, token: g.token });
+      if (!versions.length) { toast(t('ghNoVersions')); return; }
+      ghRestoreVersion(versions[0].sha);
+    } catch (e) {
+      toast(t('syncErr_' + ((e && e.code) || 'unknown')), 'error');
+    }
+  },
   syncNow: () => { clearTimeout(syncTimer); runSync(); },
   ghRestore: () => { ghRestoreSheet(); },
   ghRestoreVersion: (d) => { ghRestoreVersion(d.sha); },
@@ -2605,9 +2641,16 @@ Object.assign(forms, {
       toast(t('syncErr_' + ((e && e.code) || 'unknown')), 'error');
       return;
     }
-    secrets = { github: { repo, token, passphrase, tokenExpires: f.get('tokenExpires') || null }, sync: {} };
+    const mode = f.get('mode') === 'viewer' ? 'viewer' : 'main';
+    secrets = { github: { repo, token, passphrase, tokenExpires: f.get('tokenExpires') || null, mode }, sync: {} };
     await saveSecrets(secrets);
     render();
+    if (mode === 'viewer') {
+      toast(t('ghViewerConnected'));
+      if (remote) ghRestoreSheet(t('supportPickVersion'));
+      else toast(t('ghNoVersions'));
+      return;
+    }
     toast(t('ghConnected'));
     if (remote && !hasData()) {
       ghRestoreSheet(t('ghRemoteFound'));
