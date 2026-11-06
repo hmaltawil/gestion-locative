@@ -327,6 +327,8 @@ const fr = {
   nothingLateBefore: "Si le locataire doit encore de l'argent d'avant {month}, indiquez-le dans Modifier › Début du suivi.",
   nothingLateRentCall: "Pour demander le loyer avant qu'il soit dû, envoyez plutôt un avis d'échéance.",
   openingWhat: 'solde antérieur',
+  // 1.3.7
+  confirmFuturePayment: "Cette date est dans le futur ({date}). N'enregistrez un paiement qu'une fois l'argent reçu : une quittance prouve le paiement. Enregistrer quand même ?",
 };
 
 const en = {
@@ -656,6 +658,8 @@ const en = {
   nothingLateBefore: 'If the tenant still owes money from before {month}, enter it in Edit › Start of tracking.',
   nothingLateRentCall: 'To ask for the rent before it is due, send a rent call instead.',
   openingWhat: 'earlier balance',
+  // 1.3.7
+  confirmFuturePayment: 'This date is in the future ({date}). Record a payment only once the money has arrived: a receipt is proof of payment. Record anyway?',
 };
 
 const DICTS = { fr, en };

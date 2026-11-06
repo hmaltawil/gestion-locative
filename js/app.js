@@ -27,7 +27,7 @@ import { buildIcs, deadlines, defaultExpiry } from './deadlines.js';
 import { anonymize } from './support.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.3.6';
+export const APP_VERSION = '1.3.7';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -2204,6 +2204,9 @@ const forms = {
     const amount = parseMoney(f.get('amount'));
     if (!amount || amount <= 0) { toast(t('amountInvalid'), 'error'); return; }
     const p = { id: uid(), leaseId: form.dataset.lease, amount, date: f.get('date') || today(), method: f.get('method'), note: f.get('note').trim() };
+    // A payment is recorded once the money has arrived: a future date is usually
+    // a typing mistake, and the month would count as paid (receipt included) too early.
+    if (p.date > today() && !confirm(t('confirmFuturePayment', { date: fmtDate(p.date) }))) return;
     closeSheet();
     commit((s) => { s.payments.push(p); });
     toast(t('paymentSaved', { amount: fmtMoney(amount) }));

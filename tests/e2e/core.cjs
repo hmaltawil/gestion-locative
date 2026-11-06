@@ -176,6 +176,24 @@ require('fs').mkdirSync(OUT, { recursive: true });
   console.log('reminder with nothing late:', (await page.textContent('#sheet .sheet-body p')).trim().slice(0, 90));
   if (!(await page.locator('#sheet [data-action=rentCall]').count())) throw new Error('no rent call offered');
   await page.click('#sheet .sheet-head [data-action=closeSheet]');
+  // a payment dated in the future: a warning first; cancelling records nothing
+  {
+    const payments = () => page.locator('.card.flush', { hasText: 'Payments' }).locator('.row').count();
+    const before = await payments();
+    page.removeAllListeners('dialog');
+    let asked = '';
+    page.once('dialog', (d) => { asked = d.message(); d.dismiss(); });
+    await page.click('.card [data-action=pay]');
+    await page.fill('#sheet [name=date]', '2099-01-05');
+    await page.click('#sheet button[type=submit]');
+    await page.waitForTimeout(300);
+    console.log('future payment warning:', asked.slice(0, 60), '| saved after cancel:', (await payments()) !== before);
+    if (!/future/.test(asked) || (await payments()) !== before) throw new Error('no warning for a future payment');
+    page.on('dialog', (d) => d.accept());
+    await page.click('#sheet button[type=submit]');
+    await page.waitForTimeout(300);
+    console.log('saved after OK:', (await payments()) === before + 1);
+  }
   await page.click('.topbar a.link');
   await page.waitForSelector('form[data-form=lease] [name=openingBalance]');
   console.log('edit form shows the start of tracking:', await page.inputValue('form[data-form=lease] [name=trackFrom]'));

@@ -1,6 +1,6 @@
 {
   "name": "gestion-locative",
-  "version": "1.3.6",
+  "version": "1.3.7",
   "private": true,
   "type": "module",
   "description": "Rental management web app for a private landlord (France).",
