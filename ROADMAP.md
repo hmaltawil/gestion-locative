@@ -4,7 +4,7 @@ One place to see what's done, what's waiting, and what comes next. Update it at 
 
 **Status:** ✅ done · 🔜 next · ⏳ waiting on someone · 💡 idea, not planned yet
 
-**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3), fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before) who paid on receipts, tenant or CAF (version 1.3.6), a warning for payments dated in the future (version 1.3.7) and a safety review (version 1.3.8: security, mistakes the app now questions, legal checks, backups). All of it is live; 1.3.8 still needs its iPhone check. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL), in milestone 5 (payment history) and in the [Ideas](#ideas-backlog). **Next:** milestone 5, as soon as the Gestion Locative Facile export files arrive; then milestone 6 with sample files from CIC and Crédit Agricole.
+**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3), fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before) who paid on receipts, tenant or CAF (version 1.3.6), a warning for payments dated in the future (version 1.3.7) and a safety review (version 1.3.8: security, mistakes the app now questions, legal checks, backups). All of it is live and checked on the iPhone. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL), in milestone 5 (payment history) and in the [Ideas](#ideas-backlog). **Next:** milestone 5, as soon as the Gestion Locative Facile export files arrive; then milestone 6 with sample files from CIC and Crédit Agricole.
 
 ## How we work
 
@@ -146,7 +146,7 @@ Code: [`fb744d7`](https://github.com/hmaltawil/gestion-locative/commit/fb744d7).
 - [x] Recording a payment with a date after today asks first. Such a payment made the month count as paid (receipt included) before the money arrived, and is usually a typing mistake (a post-dated cheque can be cashed straight away, so it is recorded on the day it is deposited). It is a warning, not a block
 
 ### ✅ Version 1.3.8 · Safety review (6 Nov 2026)
-Asked for on 6 Nov 2026 ("I want the app to be safe"). iPhone check pending (see [Waiting](#waiting-on-you)).
+Code: [`0bd9df4`](https://github.com/hmaltawil/gestion-locative/commit/0bd9df4). Asked for on 6 Nov 2026 ("I want the app to be safe"). Checked on the iPhone (6 Nov 2026).
 
 Security:
 - [x] A crafted backup file could run code inside the app (shown on a test copy). Every file read back (restore, GitHub, automatic copies, the app's own storage) is now cleaned: ids, dates, months and the signature must look like what the app writes
@@ -195,14 +195,14 @@ Backups:
   - [x] Home: the three amounts at the top, and the rents' statuses, amounts and Record/✓ column, line up
   - [x] Settings › Signature › Add a signature: draw, save, and scrolling Settings never draws
   - [x] In dark mode, the text on blue buttons is easy to read
-- ⏳ **Check version 1.3.8 on the iPhone:** open the app, tap the "new version" bar, then try:
-  - [ ] Settings › About shows 1.3.8, and the app works as before (home, a lease, a receipt PDF, Settings)
-  - [ ] Record a payment of 65 000 instead of 650: the app asks first; "Cancel" records nothing
-  - [ ] A lease with late rent and no reminder › Formal notice: a window offers the reminder first
-  - [ ] Settings › Automatic backup still shows "Last automatic backup" after a change
 - ✅ **Version 1.3.7 checked on the iPhone** (6 Nov 2026)
   - [x] Settings › About shows 1.3.7
   - [x] Record a payment with a date in the future: the app asks first; "Cancel" records nothing
+- ✅ **Version 1.3.8 checked on the iPhone** (6 Nov 2026)
+  - [x] Settings › About shows 1.3.8, and the app works as before (home, a lease, a receipt PDF, Settings)
+  - [x] Record a payment of 65 000 instead of 650: the app asks first; "Cancel" records nothing
+  - [x] A lease with late rent and no reminder › Formal notice: a window offers the reminder first
+  - [x] Settings › Automatic backup still shows "Last automatic backup" after a change
 - ✅ **Versions 1.3.4 to 1.3.6 checked on the iPhone** (6 Nov 2026)
   - [x] Settings › About shows 1.3.6
   - [x] Record a payment with method "CAF / APL" and one from the tenant for the same month: the receipt says both paid and lists each payment
