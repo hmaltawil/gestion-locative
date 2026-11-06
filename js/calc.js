@@ -178,6 +178,24 @@ export function ledger(lease, allPayments, today) {
   };
 }
 
+// What the tenant has to pay next, when nothing is late: the oldest item still
+// owed, or else the next month's rent. Null for an ended lease with nothing owed.
+// { kind: 'period' | 'opening' | 'adjustment', period, label, amount, dueDate }
+export function nextPayment(lease, payments, today) {
+  const led = ledger(lease, payments, today);
+  const open = led.debts.find((d) => d.total - d.paid > 0);
+  if (open) return { kind: open.kind, period: open.period || null, label: open.label || '', amount: open.total - open.paid, dueDate: open.dueDate };
+  if (!isActive(lease, today)) return null;
+  let p = addMonths(periodOf(today), 1);
+  const first = firstTrackedPeriod(lease);
+  if (first && first > p) p = first;
+  if (lease.endDate && p > periodOf(lease.endDate)) return null;
+  const due = dueForPeriod(lease, p);
+  // An advance already paid covers part of it.
+  const amount = Math.max(0, due.total - led.credit);
+  return { kind: 'period', period: p, label: '', amount, dueDate: dueDateFor(lease, p) };
+}
+
 // Status of the yearly rent revision (article 17-1 of the law of 6 July 1989).
 // The increase cannot exceed the one-year change of the IRL for the quarter
 // named in the lease. Properties rated F or G (DPE) cannot be increased.

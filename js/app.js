@@ -3,8 +3,8 @@ import {
   periodOf, todayStr, uid, addDays,
 } from './util.js';
 import {
-  correctRent, currentRent, dueDateFor, indexationStatus, isActive, ledger, monthOverview, rentAt, rentCallBalance, rentEntryToCorrect,
-  sortedRents,
+  correctRent, currentRent, dueDateFor, firstTrackedPeriod, indexationStatus, isActive, ledger, monthOverview, nextPayment, rentAt,
+  rentCallBalance, rentEntryToCorrect, sortedRents,
 } from './calc.js';
 import { fetchInseeIrl, fmtIrlKey, irlKey, irlTable, latestIrlKey } from './irl.js';
 import {
@@ -27,7 +27,7 @@ import { buildIcs, deadlines, defaultExpiry } from './deadlines.js';
 import { anonymize } from './support.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.3.4';
+export const APP_VERSION = '1.3.5';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -474,8 +474,8 @@ function viewLease(r) {
       <div class="actions">
         <button class="action" data-action="rentCall" data-lease="${l.id}">${icon('doc')}<span>${esc(t('rentCall'))}</span></button>
         <button class="action" data-action="receiptPicker" data-lease="${l.id}">${icon('receipt')}<span>${esc(t('receipt'))}</span></button>
-        <button class="action" data-action="reminder" data-lease="${l.id}" ${led.overdue > 0 ? '' : 'disabled'}>${icon('doc')}<span>${esc(t('reminder'))}</span></button>
-        <button class="action" data-action="notice" data-lease="${l.id}" ${led.overdue > 0 ? '' : 'disabled'}>${icon('doc')}<span>${esc(t('formalNotice'))}</span></button>
+        <button class="action${led.overdue > 0 ? '' : ' unavailable'}" data-action="reminder" data-lease="${l.id}">${icon('doc')}<span>${esc(t('reminder'))}</span></button>
+        <button class="action${led.overdue > 0 ? '' : ' unavailable'}" data-action="notice" data-lease="${l.id}">${icon('doc')}<span>${esc(t('formalNotice'))}</span></button>
         <button class="action" data-action="letters" data-lease="${l.id}">${icon('stack')}<span>${esc(t('otherLetters'))}</span></button>
         ${l.chargesType !== 'forfait' ? `<a class="action" href="#/regularize/${l.id}">${icon('chart')}<span>${esc(t('regShort'))}</span></a>` : ''}
         <a class="action" href="#/departure/${l.id}">${icon('key')}<span>${esc(t('departureShort'))}</span></a>
@@ -589,14 +589,14 @@ function viewLeaseForm(r) {
           ${field(t('lastRevision'), input('lastRevision', l.lastRevision, 'type="date"'), t('lastRevisionHint'))}
         </div>
       </section>
-      ${isNew ? `<section class="card">
+      <section class="card">
         <h3>${esc(t('trackingSection'))}</h3>
         <p class="hint">${esc(t('trackingHint'))}</p>
         <div class="grid2">
-          ${field(t('trackFrom'), input('trackFrom', '', 'type="month"'))}
-          ${moneyField(t('openingBalance'), 'openingBalance', 0, t('openingBalanceHint'))}
+          ${field(t('trackFrom'), input('trackFrom', isNew ? '' : (l.trackFrom || periodOf(l.startDate)), 'type="month"'))}
+          ${moneyField(t('openingBalance'), 'openingBalance', isNew ? 0 : (Number(l.openingBalance) || 0), t('openingBalanceHint'))}
         </div>
-      </section>` : ''}
+      </section>
       <section class="card">
         ${field(t('notes'), `<textarea name="notes" rows="3">${esc(l.notes || '')}</textarea>`)}
       </section>
@@ -1857,6 +1857,28 @@ function indexationSheet(leaseId) {
     </form>`);
 }
 
+// A reminder or formal notice can only claim money already late. Instead of a
+// dead grey button, say what is due next, from when a reminder is possible,
+// and offer the rent call (the letter that asks for rent before it is due).
+function nothingLateSheet(l) {
+  const td = today();
+  const lang = state.settings.lang;
+  const next = nextPayment(l, state.payments, td);
+  let text;
+  if (!next) text = t('nothingLateAllPaid', { name: tenantsLabel(l) });
+  else {
+    const what = next.kind === 'period' ? fmtPeriodCap(next.period, lang) : next.kind === 'opening' ? t('openingWhat') : (next.label || t('adj_other'));
+    text = t('nothingLateNext', { name: tenantsLabel(l), what, amount: fmtMoney(next.amount), due: fmtDate(next.dueDate), from: fmtDate(addDays(next.dueDate, 1)) });
+  }
+  const tracked = firstTrackedPeriod(l);
+  const before = tracked && l.startDate && tracked > periodOf(l.startDate);
+  const canCall = isActive(l, td);
+  openSheet(t('nothingLateTitle'), `<p>${esc(text)}</p>
+    ${before ? `<p class="hint">${esc(t('nothingLateBefore', { month: fmtPeriod(tracked, lang) }))}</p>` : ''}
+    ${canCall ? `<p class="hint">${esc(t('nothingLateRentCall'))}</p>
+    <button class="btn block secondary" data-action="rentCall" data-lease="${l.id}">${icon('doc')} ${esc(t('rentCall'))}</button>` : ''}`);
+}
+
 function endLeaseSheet(leaseId) {
   openSheet(t('endLease'), `<form class="form" data-form="endLease" data-lease="${leaseId}">
       ${field(t('endDate'), input('endDate', today(), 'type="date" required'))}
@@ -1898,11 +1920,15 @@ const actions = {
   },
   reminder: (d) => {
     const l = leaseOf(d.lease);
-    makePdf(() => reminderPdf(state, l, ledger(l, state.payments, today())));
+    const led = ledger(l, state.payments, today());
+    if (led.overdue <= 0) { nothingLateSheet(l); return; }
+    makePdf(() => reminderPdf(state, l, led));
   },
   notice: (d) => {
     const l = leaseOf(d.lease);
-    makePdf(() => formalNoticePdf(state, l, ledger(l, state.payments, today())));
+    const led = ledger(l, state.payments, today());
+    if (led.overdue <= 0) { nothingLateSheet(l); return; }
+    makePdf(() => formalNoticePdf(state, l, led));
   },
   indexationLetter: (d, el) => {
     const l = leaseOf(d.lease);
@@ -2138,6 +2164,14 @@ const forms = {
         if (entry && !confirm(t('confirmRentCorrect', { from: fmtPeriod(entry.from, state.settings.lang) }))) return;
         correction = { rent: rentHC, charges };
       }
+    }
+    if (existing) {
+      // Start of tracking and what was owed then can be fixed later too
+      // (for example a debt from before the app was used).
+      let tf = f.get('trackFrom') || existing.trackFrom || periodOf(startDate);
+      if (tf < periodOf(startDate)) tf = periodOf(startDate);
+      data.trackFrom = tf;
+      data.openingBalance = parseMoney(f.get('openingBalance')) || 0;
     }
     if (!existing) {
       const rent = parseMoney(f.get('rent'));

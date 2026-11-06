@@ -4,7 +4,7 @@ One place to see what's done, what's waiting, and what comes next. Update it at 
 
 **Status:** ✅ done · 🔜 next · ⏳ waiting on someone · 💡 idea, not planned yet
 
-**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3) and a fix from real use (version 1.3.4: correcting a lease's rent). All of it is live; 1.3.4 still needs its iPhone check. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL), in milestone 5 (payment history) and in the [Ideas](#ideas-backlog). **Next:** milestone 5, as soon as the Gestion Locative Facile export files arrive; then milestone 6 with sample files from CIC and Crédit Agricole.
+**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3) and fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before). All of it is live; 1.3.4 and 1.3.5 still need their iPhone check. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL), in milestone 5 (payment history) and in the [Ideas](#ideas-backlog). **Next:** milestone 5, as soon as the Gestion Locative Facile export files arrive; then milestone 6 with sample files from CIC and Crédit Agricole.
 
 ## How we work
 
@@ -131,6 +131,11 @@ Code: [`0955f62`](https://github.com/hmaltawil/gestion-locative/commit/0955f62).
 iPhone check pending (see [Waiting](#waiting-on-you)).
 - [x] Editing a lease: the rent and charges can be corrected (a typing mistake). The form shows the amounts in force today, asks before changing what every month since then owes, and keeps the history of earlier amounts and revisions. A real change from a given month still goes through "Change rent"
 
+### ✅ Version 1.3.5 · Fix from real use (6 Nov 2026)
+iPhone check pending (see [Waiting](#waiting-on-you)). Reported as "no reminder without an end date"; the end date was not the cause: a reminder or formal notice only claims money already late, and the grey button gave no reason.
+- [x] "Reminder" and "Formal notice" are never a dead grey button: when nothing is late, a tap says what is due next, from which day a reminder is possible, and offers the rent call instead
+- [x] Editing a lease shows "Start of tracking" too, so money a tenant owed from before the app was used can still be entered (it then counts as late, and a reminder can claim it)
+
 ---
 
 ## Waiting on you
@@ -158,9 +163,11 @@ iPhone check pending (see [Waiting](#waiting-on-you)).
   - [x] Home: the three amounts at the top, and the rents' statuses, amounts and Record/✓ column, line up
   - [x] Settings › Signature › Add a signature: draw, save, and scrolling Settings never draws
   - [x] In dark mode, the text on blue buttons is easy to read
-- ⏳ **Check version 1.3.4 on the iPhone:** open the app, tap the "new version" bar, then try:
-  - [ ] Settings › About shows 1.3.4
+- ⏳ **Check versions 1.3.4 and 1.3.5 on the iPhone:** open the app, tap the "new version" bar, then try:
+  - [ ] Settings › About shows 1.3.5
   - [ ] A lease › Edit: the rent and charges show the amounts in force; change one, save, confirm, and the lease page shows the new amount
+  - [ ] A lease with nothing late › Reminder: a window explains what is due next and offers the rent call
+  - [ ] A lease › Edit › Start of tracking: enter an amount owed from before, save, and Reminder then works
 - ⏳ **Legal check, done once:** have the guarantor agreement, formal notice and deposit return letter reviewed, for example by your local ADIL. Questions to ask:
   - Guarantor agreement: since 2022 (article 2297 of the Civil Code), is the handwritten statement now complete (amount in figures and words; for a joint guarantee, the acknowledgment that the landlord need not pursue the tenant first)?
   - Rent revision claimed late: which IRL value applies, the latest published on the anniversary date or the latest published on the day of the request? Today the app uses the latest available on the day you tap, so with an anniversary just before INSEE publishes, a few days' difference changes the index used. Once answered, the app can follow the rule.

@@ -167,7 +167,7 @@ p { margin: 0 0 10px; }
   font: inherit; font-size: 12px; text-align: center; cursor: pointer; box-shadow: var(--shadow);
 }
 .action span { color: var(--text); line-height: 1.2; }
-.action:disabled { opacity: .45; }
+.action:disabled, .action.unavailable { opacity: .45; } /* .unavailable stays tappable: it explains why */
 
 .facts { display: grid; grid-template-columns: minmax(110px, 40%) 1fr; gap: 8px 12px; margin: 0; }
 .facts dt { color: var(--muted); font-size: 14px; }

@@ -155,7 +155,25 @@ require('fs').mkdirSync(OUT, { recursive: true });
     await (await dlp).saveAs((typeof OUT !== 'undefined' ? OUT : __dirname) + '/backup.json');
   }
 
+  // a lease with nothing late, and no end date: "Reminder" explains why instead of doing nothing
+  await nav('#/lease-new');
+  await page.fill('[name=tenant_name]', 'Paul Durand');
+  const next = new Date(); next.setMonth(next.getMonth() + 1, 1);
+  await page.fill('[name=startDate]', next.toISOString().slice(0, 10));
+  await page.fill('[name=rent]', '600');
+  await page.click('form[data-form=lease] button[type=submit]');
+  await page.waitForURL(/#\/lease\//);
+  await page.click('[data-action=reminder]');
+  await page.waitForSelector('#sheet');
+  console.log('reminder with nothing late:', (await page.textContent('#sheet .sheet-body p')).trim().slice(0, 90));
+  if (!(await page.locator('#sheet [data-action=rentCall]').count())) throw new Error('no rent call offered');
+  await page.click('#sheet .sheet-head [data-action=closeSheet]');
+  await page.click('.topbar a.link');
+  await page.waitForSelector('form[data-form=lease] [name=openingBalance]');
+  console.log('edit form shows the start of tracking:', await page.inputValue('form[data-form=lease] [name=trackFrom]'));
+
   // French UI
+  await nav('#/settings');
   await page.click('[data-action=lang][data-lang=fr]');
   await nav('#/');
   await page.waitForSelector('.tiles');

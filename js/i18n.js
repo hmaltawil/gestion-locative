@@ -320,6 +320,13 @@ const fr = {
   noSignature: 'Pas encore de signature.',
   addSignature: 'Ajouter une signature', changeSignature: 'Changer la signature',
   confirmRemoveSignature: 'Retirer la signature des prochains documents ?',
+  // 1.3.5
+  nothingLateTitle: 'Rien en retard',
+  nothingLateNext: "{name} n'a aucun retard. Prochain paiement : {what}, {amount}, à payer le {due}. S'il n'est pas payé, une relance est possible à partir du {from}.",
+  nothingLateAllPaid: "{name} est à jour : rien n'est dû pour le moment.",
+  nothingLateBefore: "Si le locataire doit encore de l'argent d'avant {month}, indiquez-le dans Modifier › Début du suivi.",
+  nothingLateRentCall: "Pour demander le loyer avant qu'il soit dû, envoyez plutôt un avis d'échéance.",
+  openingWhat: 'solde antérieur',
 };
 
 const en = {
@@ -642,6 +649,13 @@ const en = {
   noSignature: 'No signature yet.',
   addSignature: 'Add a signature', changeSignature: 'Change the signature',
   confirmRemoveSignature: 'Remove the signature from future documents?',
+  // 1.3.5
+  nothingLateTitle: 'Nothing is late',
+  nothingLateNext: "{name} has nothing late. Next payment: {what}, {amount}, due on {due}. If it isn't paid, a reminder can be sent from {from}.",
+  nothingLateAllPaid: '{name} is up to date: nothing is owed at the moment.',
+  nothingLateBefore: 'If the tenant still owes money from before {month}, enter it in Edit › Start of tracking.',
+  nothingLateRentCall: 'To ask for the rent before it is due, send a rent call instead.',
+  openingWhat: 'earlier balance',
 };
 
 const DICTS = { fr, en };

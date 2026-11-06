@@ -187,3 +187,19 @@ test('lease form: correcting the rent fixes the amount in force and keeps the hi
   assert.equal(rentEntryToCorrect({ ...two, endDate: '2025-06-30' }, '2026-11-06').from, '2024-01');
   assert.equal(rentEntryToCorrect({ startDate: '2027-02-01', rents: [{ from: '2027-02', rent: 1, charges: 0 }] }, '2026-11-06').from, '2027-02');
 });
+
+test('nothing late: what is due next, with or without an end date', async () => {
+  const { nextPayment } = await import('../js/calc.js');
+  const base = { id: 'N', startDate: '2023-01-01', paymentDay: 10, trackFrom: '2026-11', rents: [{ from: '2023-01', rent: 60000, charges: 5000 }], adjustments: [] };
+  // November not paid yet but due on the 10th: that is next, a reminder from the 11th
+  for (const lease of [base, { ...base, endDate: '2029-12-31' }]) {
+    assert.deepEqual(nextPayment(lease, [], '2026-11-06'), { kind: 'period', period: '2026-11', label: '', amount: 65000, dueDate: '2026-11-10' });
+  }
+  // November paid: December's rent, less an advance
+  const paid = [{ id: 'p', leaseId: 'N', date: '2026-11-02', amount: 70000 }];
+  assert.deepEqual(nextPayment(base, paid, '2026-11-06'), { kind: 'period', period: '2026-12', label: '', amount: 60000, dueDate: '2026-12-10' });
+  // a lease starting later: its first month
+  assert.equal(nextPayment({ ...base, startDate: '2027-02-01', trackFrom: '2027-02' }, [], '2026-11-06').period, '2027-02');
+  // ended and settled: nothing
+  assert.equal(nextPayment({ ...base, endDate: '2026-10-31', trackFrom: '2026-10' }, [{ id: 'q', leaseId: 'N', date: '2026-10-05', amount: 65000 }], '2026-11-06'), null);
+});
