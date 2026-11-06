@@ -122,7 +122,7 @@ export function ledger(lease, allPayments, today) {
     } else if (amount < 0) {
       // A refund from the charges reconciliation gives back charges, not rent;
       // the tax summary needs to know (see tax.js).
-      pool.push({ date: a.date, left: -amount, real: false, charges: a.kind === 'regularization' });
+      pool.push({ date: a.date, left: -amount, real: false, charges: a.kind === 'regularization', source: 'credit' });
       adjustments.push({ ...a, kind: 'adjustment', adjKind: a.kind, total: amount, paid: 0, credit: true });
     }
   }
@@ -131,8 +131,8 @@ export function ledger(lease, allPayments, today) {
   const payments = allPayments
     .filter((x) => x.leaseId === lease.id)
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : String(a.id).localeCompare(String(b.id))));
-  for (const x of payments) pool.push({ date: x.date, left: Number(x.amount) || 0, real: true, method: x.method });
-  if (opening < 0) pool.push({ date: trackStart, left: -opening, real: false });
+  for (const x of payments) pool.push({ date: x.date, left: Number(x.amount) || 0, real: true, method: x.method, source: payerOf(x) });
+  if (opening < 0) pool.push({ date: trackStart, left: -opening, real: false, source: 'opening' });
   pool.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
   let i = 0;
@@ -144,7 +144,7 @@ export function ledger(lease, allPayments, today) {
       const take = Math.min(need, pay.left);
       debt.paid += take;
       pay.left -= take;
-      debt.allocations.push({ date: pay.date, amount: take, real: pay.real, ...(pay.charges ? { charges: true } : {}) });
+      debt.allocations.push({ date: pay.date, amount: take, real: pay.real, source: pay.source, ...(pay.charges ? { charges: true } : {}) });
       if (debt.paid >= debt.total) { debt.paidDate = pay.date; i++; }
     }
   }
@@ -194,6 +194,27 @@ export function nextPayment(lease, payments, today) {
   // An advance already paid covers part of it.
   const amount = Math.max(0, due.total - led.credit);
   return { kind: 'period', period: p, label: '', amount, dueDate: dueDateFor(lease, p) };
+}
+
+// Who a payment came from, for receipts: the tenant, the CAF paying the housing
+// benefit straight to the landlord, or the deposit applied at a departure.
+export function payerOf(payment) {
+  if (payment.method === 'caf') return 'caf';
+  if (payment.method === 'deposit') return 'deposit';
+  return 'tenant';
+}
+
+// What settled one month (or item), for the receipt: one line per day and payer.
+// [{ date, source: 'tenant' | 'caf' | 'deposit' | 'credit' | 'opening', amount, charges? }]
+export function receivedFor(debt) {
+  const lines = [];
+  for (const a of debt.allocations || []) {
+    const source = a.source || (a.real ? 'tenant' : 'credit');
+    const same = lines.find((l) => l.date === a.date && l.source === source && !!l.charges === !!a.charges);
+    if (same) same.amount += a.amount;
+    else lines.push({ date: a.date, source, amount: a.amount, ...(a.charges ? { charges: true } : {}) });
+  }
+  return lines.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0));
 }
 
 // Status of the yearly rent revision (article 17-1 of the law of 6 July 1989).

@@ -4,7 +4,7 @@ One place to see what's done, what's waiting, and what comes next. Update it at 
 
 **Status:** ✅ done · 🔜 next · ⏳ waiting on someone · 💡 idea, not planned yet
 
-**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3) and fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before). All of it is live; 1.3.4 and 1.3.5 still need their iPhone check. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL), in milestone 5 (payment history) and in the [Ideas](#ideas-backlog). **Next:** milestone 5, as soon as the Gestion Locative Facile export files arrive; then milestone 6 with sample files from CIC and Crédit Agricole.
+**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3) fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before) and who paid on receipts, tenant or CAF (version 1.3.6). All of it is live; 1.3.4 to 1.3.6 still need their iPhone check. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL), in milestone 5 (payment history) and in the [Ideas](#ideas-backlog). **Next:** milestone 5, as soon as the Gestion Locative Facile export files arrive; then milestone 6 with sample files from CIC and Crédit Agricole.
 
 ## How we work
 
@@ -136,6 +136,11 @@ iPhone check pending (see [Waiting](#waiting-on-you)). Reported as "no reminder 
 - [x] "Reminder" and "Formal notice" are never a dead grey button: when nothing is late, a tap says what is due next, from which day a reminder is possible, and offers the rent call instead
 - [x] Editing a lease shows "Start of tracking" too, so money a tenant owed from before the app was used can still be entered (it then counts as late, and a reminder can claim it)
 
+### ✅ Version 1.3.6 · Who paid, on receipts (6 Nov 2026)
+Asked for on 6 Nov 2026. iPhone check pending (see [Waiting](#waiting-on-you)).
+- [x] Receipts and partial receipts say who paid: "reçu de [tenant] et de la CAF (aide au logement versée directement au bailleur)", then list each payment for the month with its date, who paid it (tenant, CAF, deposit, credit) and the amount
+- [x] Bank import: transfers from the CAF or the MSA are recognised from their label and recorded as CAF payments (shown with a "CAF" tag), so receipts get it right
+
 ---
 
 ## Waiting on you
@@ -163,8 +168,9 @@ iPhone check pending (see [Waiting](#waiting-on-you)). Reported as "no reminder 
   - [x] Home: the three amounts at the top, and the rents' statuses, amounts and Record/✓ column, line up
   - [x] Settings › Signature › Add a signature: draw, save, and scrolling Settings never draws
   - [x] In dark mode, the text on blue buttons is easy to read
-- ⏳ **Check versions 1.3.4 and 1.3.5 on the iPhone:** open the app, tap the "new version" bar, then try:
-  - [ ] Settings › About shows 1.3.5
+- ⏳ **Check versions 1.3.4 to 1.3.6 on the iPhone:** open the app, tap the "new version" bar, then try:
+  - [ ] Settings › About shows 1.3.6
+  - [ ] Record a payment with method "CAF / APL" and one from the tenant for the same month: the receipt says both paid and lists each payment
   - [ ] A lease › Edit: the rent and charges show the amounts in force; change one, save, confirm, and the lease page shows the new amount
   - [ ] A lease with nothing late › Reminder: a window explains what is due next and offers the rent call
   - [ ] A lease › Edit › Start of tracking: enter an amount owed from before, save, and Reminder then works
@@ -195,7 +201,7 @@ Goal: a monthly routine of about 5 minutes. Download the bank file, import it, t
 - [ ] Two accounts: rent can arrive at either bank, so both files are read the same way, and a transfer imported from one never doubles one from the other
 - [ ] Optionally import money going out as expenses, with a suggested category
 - [ ] Remember "this label always means this lease or this expense category"
-- [ ] Handle the CAF paying part of the rent directly to you
+- [ ] Handle the CAF paying part of the rent directly to you: receipts already say who paid (1.3.6); still to do: the CAF's monthly amount expected on rent calls, and matching CAF transfers (their label often has no tenant name) to the right lease
 - [ ] **Action screen after each import** (decided 5 Nov 2026):
   - payments matched, each with "send receipt" ready
   - tenants still unpaid a set number of days after the due date (5 by default), each with "send reminder" ready

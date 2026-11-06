@@ -3,6 +3,7 @@
 
 import { amountInFrench, fmtDate, fmtMoney, fmtPeriod, pdfText, slug, todayStr } from './util.js';
 import { fmtIrlKey } from './irl.js';
+import { receivedFor } from './calc.js';
 
 const M = 20; // page margin (mm)
 const W = 210 - 2 * M; // usable width
@@ -204,27 +205,56 @@ export function rentCallPdf(state, lease, call, into) {
 }
 
 // ---------- Quittance / reçu partiel ----------
+// Who paid each part of the month: the tenant, the CAF (housing benefit paid
+// straight to the landlord), the deposit, or a credit. Receipts list them.
+function payerText(line, lease) {
+  if (line.source === 'caf') return "versé par la CAF (aide au logement)";
+  if (line.source === 'deposit') return 'imputé sur le dépôt de garantie';
+  if (line.source === 'opening') return 'avance versée avant le début du suivi';
+  if (line.source === 'credit') return line.charges ? 'trop-perçu de la régularisation des charges' : 'avoir déduit';
+  return `versé par ${tenantNames(lease) || 'le locataire'}`;
+}
+
+// "de Jean Martin", "de Jean Martin et de la CAF (...)" or "de la CAF (...), pour le compte de Jean Martin".
+function receivedFrom(lines, lease) {
+  const names = tenantNames(lease) || 'le locataire';
+  const caf = lines.some((l) => l.source === 'caf');
+  const other = lines.some((l) => l.source !== 'caf');
+  const cafText = "la CAF (aide au logement versée directement au bailleur)";
+  if (caf && other) return `de ${names} et de ${cafText}`;
+  if (caf) return `de ${cafText}, pour le compte de ${names}`;
+  return `de ${names}`;
+}
+
+function paymentRows(lines, lease) {
+  return [
+    ['Détail des règlements reçus', null, { bold: true }],
+    ...lines.map((l) => [`Le ${fmtDate(l.date)} : ${payerText(l, lease)}`, fmtMoney(l.amount)]),
+  ];
+}
+
 export function receiptPdf(state, lease, row, into) {
   const ctx = ctxFor(state, lease, { date: row.paidDate && row.paid >= row.total ? row.paidDate : todayStr() });
   const doc = into || newDoc();
   const full = row.paid >= row.total;
   const L = ctx.landlord;
+  const lines = receivedFor(row);
   let y = header(doc, ctx);
   if (full) {
     y = title(doc, y, 'QUITTANCE DE LOYER', `Période ${periodLabel(row)}`);
-    y = para(doc, y, `Je soussigné(e) ${L.name || '[nom du bailleur]'}, bailleur du logement situé ${propertyAddress(ctx.property)}, déclare avoir reçu de ${tenantNames(lease)} la somme de ${fmtMoney(row.total)} au titre du paiement du loyer et des charges pour la période ${periodLabel(row)}, et lui en donne quittance, sous réserve de tous mes droits.`);
+    y = para(doc, y, `Je soussigné(e) ${L.name || '[nom du bailleur]'}, bailleur du logement situé ${propertyAddress(ctx.property)}, déclare avoir reçu ${receivedFrom(lines, lease)} la somme de ${fmtMoney(row.total)} au titre du paiement du loyer et des charges pour la période ${periodLabel(row)}, et en donne quittance, sous réserve de tous mes droits.`);
     y = table(doc, y + 2, [
       ['Loyer hors charges', fmtMoney(row.rent)],
       [chargesLabel(lease), fmtMoney(row.charges)],
       ['Total reçu', fmtMoney(row.total), { bold: true, line: true }],
     ]);
-    if (row.paidDate) y = para(doc, y, `Paiement reçu le ${fmtDate(row.paidDate)}.`);
+    if (lines.length) y = table(doc, y + 2, paymentRows(lines, lease));
     signature(doc, y + 6, ctx);
     footnote(doc, 'Quittance délivrée gratuitement (article 21 de la loi n° 89-462 du 6 juillet 1989). Elle annule tout reçu établi précédemment pour un paiement partiel de cette période.');
     return { doc, name: fileName('Quittance', row.period, lease) };
   }
   y = title(doc, y, 'REÇU DE PAIEMENT PARTIEL', `Période ${periodLabel(row)}`);
-  y = para(doc, y, `Je soussigné(e) ${L.name || '[nom du bailleur]'}, bailleur du logement situé ${propertyAddress(ctx.property)}, déclare avoir reçu de ${tenantNames(lease)} la somme de ${fmtMoney(row.paid)} en paiement partiel du loyer et des charges de la période ${periodLabel(row)}.`);
+  y = para(doc, y, `Je soussigné(e) ${L.name || '[nom du bailleur]'}, bailleur du logement situé ${propertyAddress(ctx.property)}, déclare avoir reçu ${receivedFrom(lines, lease)} la somme de ${fmtMoney(row.paid)} en paiement partiel du loyer et des charges de la période ${periodLabel(row)}.`);
   y = table(doc, y + 2, [
     ['Loyer hors charges', fmtMoney(row.rent)],
     [chargesLabel(lease), fmtMoney(row.charges)],
@@ -232,6 +262,7 @@ export function receiptPdf(state, lease, row, into) {
     ['Montant reçu', fmtMoney(row.paid)],
     ['Reste dû', fmtMoney(row.total - row.paid), { bold: true }],
   ]);
+  if (lines.length) y = table(doc, y + 2, paymentRows(lines, lease));
   signature(doc, y + 6, ctx);
   footnote(doc, 'Ce reçu ne vaut pas quittance (article 21 de la loi n° 89-462 du 6 juillet 1989). Une quittance sera délivrée après paiement intégral.');
   return { doc, name: fileName('Recu-partiel', row.period, lease) };

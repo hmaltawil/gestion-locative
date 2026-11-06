@@ -351,3 +351,34 @@ test('charges reconciliation: leases of the same property at the same time', asy
   assert.deepEqual(overlappingLeases([a, b, c, d], a, 2025).map((x) => x.id), ['C']);
   assert.deepEqual(overlappingLeases([a, c], a, 2026), []); // A has ended by 2026
 });
+
+test('receipts: who paid each month (tenant, CAF, deposit, credit)', async () => {
+  const { receivedFor } = await import('../js/calc.js');
+  const l = { id: 'C', startDate: '2026-09-01', trackFrom: '2026-09', paymentDay: 5, rents: [{ from: '2026-09', rent: 60000, charges: 5000 }],
+    adjustments: [{ id: 'r', kind: 'regularization', amount: -3000, date: '2026-10-01', regYear: 2025 }] };
+  const pays = [
+    { id: 'a', leaseId: 'C', date: '2026-09-04', amount: 20000, method: 'caf' },
+    { id: 'b', leaseId: 'C', date: '2026-09-05', amount: 30000, method: 'transfer' },
+    { id: 'c', leaseId: 'C', date: '2026-09-05', amount: 15000, method: 'cheque' }, // same day, same payer: one line
+    { id: 'd', leaseId: 'C', date: '2026-10-03', amount: 20000, method: 'caf' },
+    { id: 'e', leaseId: 'C', date: '2026-10-06', amount: 12000, method: 'transfer' },
+  ];
+  const led = ledger(l, pays, '2026-10-20');
+  assert.deepEqual(receivedFor(led.rows[0]), [
+    { date: '2026-09-04', source: 'caf', amount: 20000 },
+    { date: '2026-09-05', source: 'tenant', amount: 45000 },
+  ]);
+  assert.deepEqual(receivedFor(led.rows[1]), [
+    { date: '2026-10-01', source: 'credit', amount: 3000, charges: true },
+    { date: '2026-10-03', source: 'caf', amount: 20000 },
+    { date: '2026-10-06', source: 'tenant', amount: 12000 },
+  ]);
+});
+
+test('bank import: transfers from the CAF are recognised', async () => {
+  const { isHousingAidLabel } = await import('../js/bank.js');
+  for (const label of ['VIR CAF DU RHONE 4455 ALLOC', 'VIREMENT SEPA RECU /DE CAF DE PARIS', 'VIR MSA ILE DE FRANCE', 'ALLOCATION LOGEMENT 11/2026', 'Prestations Caf'])
+    assert.ok(isHousingAidLabel(label), label);
+  for (const label of ['VIR SEPA RECU /DE M JEAN MARTIN', 'VIR DE MME CAFFIER', 'CB CAFE DE LA GARE'])
+    assert.ok(!isHousingAidLabel(label), label);
+});

@@ -20,14 +20,14 @@ import {
   deliver, departurePdf, depositReceiptPdf, formalNoticePdf, guarantorPdf, indexationPdf, newPdf, receiptPdf, regularizationPdf,
   reminderPdf, rentCallPdf, rentCertificatePdf, shareFile, taxSummaryPdf,
 } from './docs.js';
-import { guessMapping, knownLabels, manualDuplicates, parseCsv, suggestLease, toTransactions } from './bank.js';
+import { guessMapping, isHousingAidLabel, knownLabels, manualDuplicates, parseCsv, suggestLease, toTransactions } from './bank.js';
 import { departureStatement, depositSettlement, overlappingLeases, recoverableExpenses, regularization } from './charges.js';
 import { LINE_2044, taxSummary, yearCsv } from './tax.js';
 import { buildIcs, deadlines, defaultExpiry } from './deadlines.js';
 import { anonymize } from './support.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.3.5';
+export const APP_VERSION = '1.3.6';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -985,7 +985,7 @@ function viewImport() {
     return `<li class="imp-row${c.dup ? ' dup' : ''}">
       <label class="imp-check"><input type="checkbox" data-change="impToggle" data-fp="${esc(tx.fp)}" ${c.on && !c.dup ? 'checked' : ''} ${c.dup ? 'disabled' : ''}></label>
       <div class="imp-main">
-        <div class="imp-top"><strong>${fmtMoney(tx.amount)}</strong><span class="muted small">${fmtDate(tx.date)}</span></div>
+        <div class="imp-top"><strong>${fmtMoney(tx.amount)}${isHousingAidLabel(tx.label) ? ` <span class="pill">${esc(t('method_caf'))}</span>` : ''}</strong><span class="muted small">${fmtDate(tx.date)}</span></div>
         <div class="muted small imp-label">${esc(tx.label)}</div>
         ${c.dup ? `<span class="pill muted">${esc(t('alreadyImported'))}</span>` : select('lease', leaseOpts, c.leaseId || '', `data-change="impLease" data-fp="${esc(tx.fp)}"`)}
         ${c.maybe ? `<p class="note warn small">${esc(t('importMaybeDup', { date: fmtDate(c.maybe.date), who: tenantsLabel(leaseOf(c.maybe.leaseId) || {}) }))}</p>` : ''}
@@ -2404,7 +2404,8 @@ Object.assign(actions, {
     for (const tx of s.txs) {
       const c = s.choices[tx.fp];
       if (tx.amount > 0 && c && c.on && c.leaseId && !c.dup) {
-        add.push({ id: uid(), leaseId: c.leaseId, amount: tx.amount, date: tx.date, method: 'transfer', note: tx.label.slice(0, 60), bankRef: tx.fp, bankLabel: tx.label });
+        const method = isHousingAidLabel(tx.label) ? 'caf' : 'transfer';
+        add.push({ id: uid(), leaseId: c.leaseId, amount: tx.amount, date: tx.date, method, note: tx.label.slice(0, 60), bankRef: tx.fp, bankLabel: tx.label });
       }
     }
     sessions.import = null;

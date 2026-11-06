@@ -15,7 +15,7 @@ What's done and what's planned: see [ROADMAP.md](ROADMAP.md). Notes for develope
 - **Bank statement import:** reads the CSV export from any bank (columns are detected and can be corrected), matches incoming transfers to leases by tenant name, amount and labels seen before, skips anything already imported, and flags payments you already typed in by hand.
 
 **PDF documents (in French)**
-- Rent call, receipt, partial payment receipt, reminder, formal notice.
+- Rent call, receipt, partial payment receipt, reminder, formal notice. Receipts say who paid each part of the rent: the tenant or the CAF (housing benefit paid directly to you).
 - Rent revision letter, charges reconciliation statement, deposit return statement.
 - Rent certificate (attestation de loyer), deposit receipt, guarantor agreement (acte de cautionnement).
 

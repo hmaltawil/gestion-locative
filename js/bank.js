@@ -234,6 +234,12 @@ export function manualDuplicates(txs, payments, suggested = {}, days = 7) {
   return out;
 }
 
+// A transfer from the CAF (or the MSA): housing benefit paid straight to the
+// landlord, so receipts can say who paid.
+export function isHousingAidLabel(label) {
+  return /(^| )(CAF|MSA|CNAF|APL)( |$)|ALLOC(ATION)? LOG/.test(normalizeText(label));
+}
+
 // Labels already used for a lease in earlier imports.
 export function knownLabels(payments) {
   const known = {};

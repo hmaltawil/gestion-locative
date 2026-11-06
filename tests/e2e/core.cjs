@@ -129,10 +129,18 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await dl(() => page.click('[data-action=reminder]'), 'relance.pdf');
   await dl(() => page.click('[data-action=notice]'), 'mise-en-demeure.pdf');
   // partial payment then partial receipt
+  // the CAF pays 200 € of the housing benefit straight to the landlord
   await page.click('.card [data-action=pay]');
   await page.fill('#sheet [name=amount]', '200');
+  await page.selectOption('#sheet [name=method]', 'caf');
   await page.click('#sheet button[type=submit]');
   await dl(() => page.click('[data-action=receipt][data-period="2026-08"]'), 'recu-partiel.pdf');
+  {
+    const text = require('child_process').execFileSync('pdftotext', [OUT + '/recu-partiel.pdf', '-']).toString().replace(/\s+/g, ' ');
+    const said = /reçu de la CAF \(aide au logement versée directement au bailleur\), pour le compte de Sophie Bernard et Luc Petit/.test(text) && /versé par la CAF/.test(text);
+    console.log('partial receipt says the CAF paid:', said);
+    if (!said) throw new Error('receipt does not say who paid: ' + text.slice(0, 400));
+  }
 
   // expenses
   await nav('#/expense-new');
