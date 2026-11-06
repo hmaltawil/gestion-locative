@@ -133,21 +133,88 @@ export function saveSecrets(secrets) {
   return tx(STORE, 'readwrite', (s) => s.put(JSON.parse(JSON.stringify(secrets)), SECRETS_KEY));
 }
 
-// Fills in anything missing so older data and backups keep working.
+// ---------- cleaning what is read back ----------
+// Everything the app reads (its own storage, a backup file, a GitHub backup, an
+// automatic copy) goes through normalize(). Some values are put on screen as
+// they are (ids, dates, months, the signature), so they must look exactly like
+// what the app itself writes: a crafted file must never be able to slip code in.
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const cleanId = (v) => String(v ?? '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+const cleanDate = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+const cleanMonth = (v) => (typeof v === 'string' && /^\d{4}-\d{2}$/.test(v) ? v : null);
+const cleanNum = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : 0);
+const cleanText = (v) => (v === null || v === undefined ? '' : String(v));
+const cleanSignature = (v) => (typeof v === 'string' && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(v) ? v : null);
+const objects = (v) => (Array.isArray(v) ? v.filter(isObj) : []);
+
+function cleanDates(o, keys) {
+  for (const k of keys) if (k in o) o[k] = cleanDate(o[k]);
+}
+
+function cleanState(s) {
+  s.settings.lang = s.settings.lang === 'en' ? 'en' : 'fr';
+  s.settings.signature = cleanSignature(s.settings.signature);
+  for (const k of ['lastBackup', 'irlUpdated']) s.settings[k] = cleanDate(s.settings[k]);
+  for (const k of Object.keys(s.settings.landlord)) s.settings.landlord[k] = cleanText(s.settings.landlord[k]);
+  s.irl = Object.fromEntries(Object.entries(s.irl).filter(([k, v]) => /^\d{4}-Q[1-4]$/.test(k) && Number.isFinite(Number(v))).map(([k, v]) => [k, Number(v)]));
+  s.sent = Object.fromEntries(Object.entries(s.sent).map(([k, v]) => [k, cleanDate(v)]).filter(([, v]) => v));
+  s.tax = Object.fromEntries(Object.entries(s.tax).filter(([k, v]) => /^\d{4}$/.test(k) && isObj(v)).map(([k, v]) => [k, { ...v, line230: cleanNum(v.line230) }]));
+
+  s.properties = objects(s.properties);
+  for (const p of s.properties) {
+    p.id = cleanId(p.id);
+    if (!['A', 'B', 'C', 'D', 'E', 'F', 'G'].includes(p.dpe)) p.dpe = '';
+    p.diagnostics = objects(p.diagnostics);
+    for (const d of p.diagnostics) { d.id = cleanId(d.id); d.date = cleanDate(d.date); d.expiry = cleanDate(d.expiry) || ''; }
+  }
+  s.leases = objects(s.leases);
+  for (const l of s.leases) {
+    l.id = cleanId(l.id);
+    l.propertyId = cleanId(l.propertyId);
+    cleanDates(l, ['startDate', 'endDate', 'insuranceUntil', 'lastRevision']);
+    if ('trackFrom' in l) l.trackFrom = cleanMonth(l.trackFrom);
+    if (l.revisionDate !== undefined && l.revisionDate !== null && !/^\d{2}-\d{2}$/.test(String(l.revisionDate))) l.revisionDate = null;
+    l.paymentDay = Math.min(28, Math.max(1, cleanNum(l.paymentDay) || 1));
+    for (const k of ['deposit', 'openingBalance']) if (k in l) l[k] = cleanNum(l[k]);
+    l.tenants = objects(l.tenants);
+    l.rents = objects(l.rents).filter((r) => cleanMonth(r.from)).map((r) => ({ ...r, rent: cleanNum(r.rent), charges: cleanNum(r.charges) }));
+    l.adjustments = objects(l.adjustments);
+    for (const a of l.adjustments) { a.id = cleanId(a.id); a.date = cleanDate(a.date); a.amount = cleanNum(a.amount); }
+    if (isObj(l.irl)) {
+      const q = Number(l.irl.quarter);
+      l.irl = [1, 2, 3, 4].includes(q) ? { quarter: q, key: /^\d{4}-Q[1-4]$/.test(l.irl.key) ? l.irl.key : null, value: Number(l.irl.value) || null } : null;
+    } else l.irl = null;
+    l.regularizations = isObj(l.regularizations) ? l.regularizations : {};
+    for (const r of Object.values(l.regularizations)) if (isObj(r)) r.date = cleanDate(r.date);
+    if (isObj(l.departure)) {
+      cleanDates(l.departure, ['keysDate', 'returnedOn']);
+      l.departure.deductions = objects(l.departure.deductions);
+    } else delete l.departure;
+  }
+  s.payments = objects(s.payments).filter((x) => cleanDate(x.date));
+  for (const x of s.payments) { x.id = cleanId(x.id); x.leaseId = cleanId(x.leaseId); x.amount = cleanNum(x.amount); }
+  s.expenses = objects(s.expenses).filter((e) => cleanDate(e.date));
+  for (const e of s.expenses) { e.id = cleanId(e.id); e.propertyId = e.propertyId ? cleanId(e.propertyId) : ''; e.amount = cleanNum(e.amount); }
+  s.reminders = objects(s.reminders);
+  for (const r of s.reminders) { r.id = cleanId(r.id); r.date = cleanDate(r.date); r.propertyId = r.propertyId ? cleanId(r.propertyId) : ''; }
+  s.documents = objects(s.documents);
+  for (const d of s.documents) { d.id = cleanId(d.id); d.ownerId = cleanId(d.ownerId); d.date = cleanDate(d.date); d.size = cleanNum(d.size); }
+  s.trash = objects(s.trash);
+  for (const d of s.trash) { d.id = cleanId(d.id); d.deletedOn = cleanDate(d.deletedOn); }
+}
+
+// Fills in anything missing so older data and backups keep working, and cleans it.
 export function normalize(raw) {
   const base = emptyState();
+  if (!isObj(raw)) raw = {};
   const s = { ...base, ...raw };
-  s.settings = { ...base.settings, ...(raw.settings || {}) };
-  s.settings.landlord = { ...base.settings.landlord, ...((raw.settings || {}).landlord || {}) };
+  s.settings = { ...base.settings, ...(isObj(raw.settings) ? raw.settings : {}) };
+  s.settings.landlord = { ...base.settings.landlord, ...(isObj(s.settings.landlord) ? s.settings.landlord : {}) };
   for (const k of ['properties', 'leases', 'payments', 'expenses', 'reminders', 'documents', 'trash']) if (!Array.isArray(s[k])) s[k] = [];
-  if (!s.irl || typeof s.irl !== 'object') s.irl = {};
-  if (!s.sent || typeof s.sent !== 'object') s.sent = {};
-  if (!s.tax || typeof s.tax !== 'object' || Array.isArray(s.tax)) s.tax = {};
-  for (const l of s.leases) {
-    if (!Array.isArray(l.adjustments)) l.adjustments = [];
-    if (!l.regularizations || typeof l.regularizations !== 'object') l.regularizations = {};
-  }
-  for (const p of s.properties) if (!Array.isArray(p.diagnostics)) p.diagnostics = [];
+  if (!isObj(s.irl)) s.irl = {};
+  if (!isObj(s.sent)) s.sent = {};
+  if (!isObj(s.tax)) s.tax = {};
+  cleanState(s);
   s.version = DATA_VERSION;
   return s;
 }

@@ -41,6 +41,7 @@ Three layers of protection:
 3. **Manual backup file** (Settings › Manual backup › Back up › Save to Files › iCloud Drive). The app reminds you if neither this nor the GitHub backup has run for 7 days.
 
 - **Deleting the home-screen icon deletes the data on the phone.** Restore from GitHub or from a backup file.
+- **Safety:** the app questions likely mistakes before saving (a payment dated in the future or far above what is owed, a backdated rent increase, dates years off) and refuses what the law forbids (a backdated revision, a rent increase on a property rated F or G). Restored files are cleaned before use, a browser security rule only lets the app's own code run, and the GitHub backup pauses rather than replacing a much fuller version.
 - **The home-screen app and Safari have separate storage.** Always open the app from its icon.
 
 ## Install on iPhone
@@ -73,6 +74,7 @@ npm run e2e       # browser tests (Playwright), with the server running
 
 - `js/calc.js`: rent due, payment allocation, late amounts and the IRL revision. These are pure functions, covered by the tests.
 - `js/bank.js`: bank CSV parsing and payment matching.
+- `js/checks.js`: checks on what is typed in (likely mistakes, legal limits), before it is saved.
 - `js/charges.js`: charges reconciliation, deposit return, lease terms.
 - `js/tax.js`: form 2044 summary and the CSV export.
 - `js/deadlines.js`: deadlines and the calendar (.ics) file.

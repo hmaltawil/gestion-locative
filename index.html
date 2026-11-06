@@ -2,6 +2,9 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
+  <!-- Security rule: only the app's own scripts run (plus the theme script below, by its hash: update the hash if you
+       change that script, a test checks it), and the app only talks to GitHub (backup) and INSEE (rent index). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-0UCDm26du6GB+WHv5fRVBGQN1LmxQkPDoNA5lehQYtA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.github.com https://bdm.insee.fr; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Gestion locative</title>
   <meta name="description" content="Suivi des loyers, quittances et révisions pour propriétaires bailleurs.">

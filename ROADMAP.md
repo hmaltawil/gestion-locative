@@ -4,7 +4,7 @@ One place to see what's done, what's waiting, and what comes next. Update it at 
 
 **Status:** ✅ done · 🔜 next · ⏳ waiting on someone · 💡 idea, not planned yet
 
-**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3), fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before) who paid on receipts, tenant or CAF (version 1.3.6), and a warning for payments dated in the future (version 1.3.7). All of it is live and checked on the iPhone. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL), in milestone 5 (payment history) and in the [Ideas](#ideas-backlog). **Next:** milestone 5, as soon as the Gestion Locative Facile export files arrive; then milestone 6 with sample files from CIC and Crédit Agricole.
+**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3), fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before) who paid on receipts, tenant or CAF (version 1.3.6), a warning for payments dated in the future (version 1.3.7) and a safety review (version 1.3.8: security, mistakes the app now questions, legal checks, backups). All of it is live; 1.3.8 still needs its iPhone check. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL), in milestone 5 (payment history) and in the [Ideas](#ideas-backlog). **Next:** milestone 5, as soon as the Gestion Locative Facile export files arrive; then milestone 6 with sample files from CIC and Crédit Agricole.
 
 ## How we work
 
@@ -145,6 +145,29 @@ Code: [`4ca75ad`](https://github.com/hmaltawil/gestion-locative/commit/4ca75ad).
 Code: [`fb744d7`](https://github.com/hmaltawil/gestion-locative/commit/fb744d7). Asked about on 6 Nov 2026. Checked on the iPhone (6 Nov 2026).
 - [x] Recording a payment with a date after today asks first. Such a payment made the month count as paid (receipt included) before the money arrived, and is usually a typing mistake (a post-dated cheque can be cashed straight away, so it is recorded on the day it is deposited). It is a warning, not a block
 
+### ✅ Version 1.3.8 · Safety review (6 Nov 2026)
+Asked for on 6 Nov 2026 ("I want the app to be safe"). iPhone check pending (see [Waiting](#waiting-on-you)).
+
+Security:
+- [x] A crafted backup file could run code inside the app (shown on a test copy). Every file read back (restore, GitHub, automatic copies, the app's own storage) is now cleaned: ids, dates, months and the signature must look like what the app writes
+- [x] A browser security rule (Content Security Policy): only the app's own code runs, and the app only talks to GitHub and INSEE
+
+Mistakes the app now questions (it asks first) or refuses:
+- [x] Payment dated before the start of tracking, or far above what is owed plus two months (asks)
+- [x] Negative rent, charges, deposit, new charges advance or departure deduction (refused)
+- [x] Expense, diagnostic report or deposit return dated in the future; insurance valid more than 15 months ahead; last revision in the future; lease starting more than a year ahead or before 1980 (asks)
+
+Legal safety:
+- [x] Rent revision: "Apply from" can't be earlier than allowed (no backdating, refused)
+- [x] "Change rent": a rent increase on a property rated F or G is refused; an increase mid-lease, or a backdated one, asks first; a change before the lease start is refused. Charges changes stay free
+- [x] Formal notice with no reminder made in the app first: a window says so and offers the reminder (reminders made are now remembered)
+- [x] Guarantor agreement with a maximum of 0 € (refused)
+
+Backups:
+- [x] The GitHub backup pauses, with a warning on the home screen, when it would lose more than half of the leases, properties or payments (after an erase or a mass deletion); "Save this phone's data anyway" goes ahead
+- [x] New GitHub connections need a passphrase of at least 12 characters
+- [x] Attachments over 15 MB are refused, with a message
+
 ---
 
 ## Waiting on you
@@ -172,6 +195,11 @@ Code: [`fb744d7`](https://github.com/hmaltawil/gestion-locative/commit/fb744d7).
   - [x] Home: the three amounts at the top, and the rents' statuses, amounts and Record/✓ column, line up
   - [x] Settings › Signature › Add a signature: draw, save, and scrolling Settings never draws
   - [x] In dark mode, the text on blue buttons is easy to read
+- ⏳ **Check version 1.3.8 on the iPhone:** open the app, tap the "new version" bar, then try:
+  - [ ] Settings › About shows 1.3.8, and the app works as before (home, a lease, a receipt PDF, Settings)
+  - [ ] Record a payment of 65 000 instead of 650: the app asks first; "Cancel" records nothing
+  - [ ] A lease with late rent and no reminder › Formal notice: a window offers the reminder first
+  - [ ] Settings › Automatic backup still shows "Last automatic backup" after a change
 - ✅ **Version 1.3.7 checked on the iPhone** (6 Nov 2026)
   - [x] Settings › About shows 1.3.7
   - [x] Record a payment with a date in the future: the app asks first; "Cancel" records nothing
@@ -245,6 +273,9 @@ Goal: a monthly routine of about 5 minutes. Download the bank file, import it, t
 - **Full font for PDFs**, so names in any alphabet print exactly (today letters outside French and Western European ones are simplified: Łukasz → Lukasz). Cost: about 1 MB more in the app and in every PDF sent
 - **Return of the 20% held back** for a building with shared accounts: a reminder once the building's accounts are approved, and the final statement
 - **Charges split between several tenants of one property** (by share or surface), if a property ever holds more than one letting at the same time; today the app warns
+- **Encrypted manual backup file** (from the safety review): the file saved in iCloud Drive holds all tenant data unencrypted; it could use the same passphrase as the GitHub backup
+- **App lock with Face ID or a PIN** (from the safety review): anyone holding the unlocked phone can open the app
+- **An automatic copy before deleting a payment or an expense** (from the safety review): today only the daily copy covers them
 
 ## Known limitations (current version)
 

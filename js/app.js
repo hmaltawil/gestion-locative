@@ -25,9 +25,13 @@ import { departureStatement, depositSettlement, overlappingLeases, recoverableEx
 import { LINE_2044, taxSummary, yearCsv } from './tax.js';
 import { buildIcs, deadlines, defaultExpiry } from './deadlines.js';
 import { anonymize } from './support.js';
+import {
+  MAX_DOC_BYTES, MIN_PASSPHRASE, backupShrinks, checkGuarantor, checkInsurance, checkLease, checkNotFuture, checkPayment, checkRentChange,
+  checkRevisionFrom, reminderSentSinceLate,
+} from './checks.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.3.7';
+export const APP_VERSION = '1.3.8';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -711,7 +715,7 @@ function viewSettings() {
       <section class="card">
         <h3>${esc(t('signature'))}</h3>
         <p class="hint">${esc(t('signatureCardHint'))}</p>
-        ${s.signature ? `<img class="sig-preview" src="${s.signature}" alt="${esc(t('signature'))}">` : `<p class="muted">${esc(t('noSignature'))}</p>`}
+        ${s.signature ? `<img class="sig-preview" src="${esc(s.signature)}" alt="${esc(t('signature'))}">` : `<p class="muted">${esc(t('noSignature'))}</p>`}
         <div class="btn-row">
           <button class="btn secondary" type="button" data-action="sigOpen">${esc(t(s.signature ? 'changeSignature' : 'addSignature'))}</button>
           ${s.signature ? `<button class="btn ghost danger" type="button" data-action="sigRemove">${esc(t('remove'))}</button>` : ''}
@@ -1510,6 +1514,10 @@ async function runSync() {
     if (!g.device) { g.device = uid().replace(/-/g, '').slice(0, 8); await saveSecrets(secrets); }
     const tag = `[${g.device}]`;
     if (meta.forceNext) meta.dataSha = await getSha(cfg, DATA_PATH);
+    // After an erase or a mass deletion, don't let the next change replace a
+    // much fuller backup without asking (js/checks.js).
+    const counts = snapCounts(state);
+    if (!meta.forceNext && backupShrinks(meta.lastCounts, counts)) throw new SyncError('shrink');
     const session = await newKeySession(g.passphrase);
     const stamp = fmtDateTime(meta.lastAttempt);
     const uploaded = new Set(meta.uploadedDocs || []);
@@ -1529,6 +1537,7 @@ async function runSync() {
     meta.lastOk = new Date().toISOString();
     meta.lastError = null;
     meta.forceNext = false;
+    meta.lastCounts = counts;
     meta.dirty = commitCount !== startCount;
     if (meta.dirty) syncAgain = true;
   } catch (e) {
@@ -1548,8 +1557,8 @@ function syncStatusHtml(running) {
   if (isViewer()) return `<p>${esc(m.lastRefresh ? t('supportStatus', { date: fmtDateTime(m.lastRefresh) }) : t('supportNever'))}</p>`;
   let h = `<p>${esc(m.lastOk ? t('syncLastOk', { date: fmtDateTime(m.lastOk) }) : t('syncNever'))}</p>`;
   if (running) h += `<p class="muted small">${esc(t('syncRunning'))}</p>`;
-  else if (m.lastError === 'conflict') {
-    h += `<p class="note warn">${esc(t('syncConflict'))}</p>
+  else if (m.lastError === 'conflict' || m.lastError === 'shrink') {
+    h += `<p class="note warn">${esc(t(m.lastError === 'shrink' ? 'syncShrink' : 'syncConflict'))}</p>
       <button class="btn small secondary" data-action="syncForce">${esc(t('syncForce'))}</button>`;
   } else if (m.lastError) h += `<p class="note warn">${esc(t('syncFailed', { reason: t('syncErr_' + m.lastError) }))}</p>`;
   return h;
@@ -1565,8 +1574,8 @@ function safetyBanners() {
   if (!g) return '';
   const m = syncMeta();
   let out = '';
-  if (!isViewer() && m.lastError === 'conflict') {
-    out += `<a class="banner warn" href="#/settings">${esc(t('syncConflictBanner'))}</a>`;
+  if (!isViewer() && (m.lastError === 'conflict' || m.lastError === 'shrink')) {
+    out += `<a class="banner warn" href="#/settings">${esc(t(m.lastError === 'shrink' ? 'syncShrinkBanner' : 'syncConflictBanner'))}</a>`;
   } else if (!isViewer() && m.lastError && (!m.lastOk || m.lastOk.slice(0, 10) < addDays(today(), -2))) {
     out += `<a class="banner warn" href="#/settings">${esc(t('syncFailingBanner', { reason: t('syncErr_' + m.lastError) }))}</a>`;
   }
@@ -1685,6 +1694,7 @@ async function ghRestoreVersion(sha) {
     const m = syncMeta();
     m.dataSha = await getSha(cfg, DATA_PATH);
     m.uploadedDocs = next.documents.map((d) => d.id);
+    m.lastCounts = snapCounts(next);
     m.lastError = null;
     m.lastRefresh = new Date().toISOString();
     await saveSecrets(secrets);
@@ -1879,12 +1889,42 @@ function nothingLateSheet(l) {
     <button class="btn block secondary" data-action="rentCall" data-lease="${l.id}">${icon('doc')} ${esc(t('rentCall'))}</button>` : ''}`);
 }
 
+function noticeWithoutReminderSheet(l) {
+  openSheet(t('noticeNoReminderTitle'), `<p>${esc(t('noticeNoReminder'))}</p>
+    <div class="btn-row">
+      <button class="btn" data-action="reminder" data-lease="${l.id}">${icon('doc')} ${esc(t('reminder'))}</button>
+      <button class="btn secondary" data-action="notice" data-lease="${l.id}" data-anyway="1">${esc(t('noticeAnyway'))}</button>
+    </div>`);
+}
+
 function endLeaseSheet(leaseId) {
   openSheet(t('endLease'), `<form class="form" data-form="endLease" data-lease="${leaseId}">
       ${field(t('endDate'), input('endDate', today(), 'type="date" required'))}
       <p class="hint">${esc(t('endLeaseHint'))}</p>
       <button class="btn block" type="submit">${esc(t('save'))}</button>
     </form>`);
+}
+
+// ---------------------------------------------------------------- checks (js/checks.js)
+
+// Formats a check's raw params for its message.
+function chkParams(p = {}) {
+  const out = {};
+  for (const [k, v] of Object.entries(p)) {
+    if (v === null || v === undefined) continue;
+    if (k === 'date') out[k] = fmtDate(v);
+    else if (k === 'month') out[k] = fmtPeriod(v, state.settings.lang);
+    else if (['amount', 'owed', 'rent', 'max', 'from', 'to'].includes(k)) out[k] = fmtMoney(v);
+    else out[k] = v;
+  }
+  return out;
+}
+
+// Refuses with a message, or asks each question. True means: go ahead.
+function passes(check) {
+  if (check.error) { alert(t('chk_' + check.error.key, chkParams(check.error.params))); return false; }
+  for (const w of check.warnings) if (!confirm(t('chk_' + w.key, chkParams(w.params)))) return false;
+  return true;
 }
 
 // ---------------------------------------------------------------- PDF helpers
@@ -1918,24 +1958,33 @@ const actions = {
     const row = led.rows.find((x) => x.period === d.period);
     if (row) makePdf(() => receiptPdf(state, l, row));
   },
-  reminder: (d) => {
+  reminder: async (d) => {
     const l = leaseOf(d.lease);
     const led = ledger(l, state.payments, today());
     if (led.overdue <= 0) { nothingLateSheet(l); return; }
-    makePdf(() => reminderPdf(state, l, led));
+    closeSheet();
+    const res = await makePdf(() => reminderPdf(state, l, led));
+    // Remembered, so the formal notice can tell whether a reminder came first.
+    if (res && res !== 'cancelled') commit((s) => { s.sent[`reminder:${l.id}`] = today(); });
   },
   notice: (d) => {
     const l = leaseOf(d.lease);
     const led = ledger(l, state.payments, today());
     if (led.overdue <= 0) { nothingLateSheet(l); return; }
+    // The letter says reminders were sent: if none was made in the app, say so
+    // first (in a sheet, so that the next tap can still open the share menu).
+    if (!d.anyway && !reminderSentSinceLate(l, led, state.sent)) { noticeWithoutReminderSheet(l); return; }
+    closeSheet();
     makePdf(() => formalNoticePdf(state, l, led));
   },
   indexationLetter: (d, el) => {
     const l = leaseOf(d.lease);
     const info = indexationStatus(l, prop(l.propertyId), irlTable(state), today());
     const applyFrom = el.closest('form').elements.applyFrom.value || info.applyFrom;
+    if (!passes(checkRevisionFrom(info, applyFrom))) return;
     makePdf(() => indexationPdf(state, l, info, applyFrom));
   },
+
   addTenantRow: () => {
     const box = document.getElementById('tenants');
     const n = box.querySelectorAll('[data-tenant]').length;
@@ -2150,10 +2199,10 @@ const forms = {
       insuranceUntil: f.get('insuranceUntil') || null,
       notes: f.get('notes').trim(),
     };
-    // Unfurnished lease: the deposit is at most one month's rent excluding charges.
     const rentHC = parseMoney(f.get('rent'));
-    if (rentHC > 0 && data.deposit > rentHC && data.deposit !== (existing && existing.deposit)
-      && !confirm(t('depositAboveCap', { max: fmtMoney(rentHC) }))) return;
+    // Negative amounts, a mistyped year, insurance or revision dates far ahead,
+    // a deposit above one month's rent (js/checks.js).
+    if (!passes(checkLease({ ...data, rent: rentHC, charges: parseMoney(f.get('charges')) }, today(), existing))) return;
     // A corrected rent or charges amount (typing mistake) on an existing lease.
     let correction = null;
     if (existing) {
@@ -2204,9 +2253,8 @@ const forms = {
     const amount = parseMoney(f.get('amount'));
     if (!amount || amount <= 0) { toast(t('amountInvalid'), 'error'); return; }
     const p = { id: uid(), leaseId: form.dataset.lease, amount, date: f.get('date') || today(), method: f.get('method'), note: f.get('note').trim() };
-    // A payment is recorded once the money has arrived: a future date is usually
-    // a typing mistake, and the month would count as paid (receipt included) too early.
-    if (p.date > today() && !confirm(t('confirmFuturePayment', { date: fmtDate(p.date) }))) return;
+    // Dated in the future, before tracking started, or far more than owed (js/checks.js).
+    if (!passes(checkPayment(leaseOf(p.leaseId), state.payments, p, today()))) return;
     closeSheet();
     commit((s) => { s.payments.push(p); });
     toast(t('paymentSaved', { amount: fmtMoney(amount) }));
@@ -2219,8 +2267,11 @@ const forms = {
   changeRent: (f, form) => {
     const from = f.get('from');
     const rent = parseMoney(f.get('rent'));
-    if (!from || rent === null) return;
+    if (rent === null) { alert(t('rentMissing')); return; }
     const charges = parseMoney(f.get('charges')) || 0;
+    const l = leaseOf(form.dataset.lease);
+    // F/G properties, backdated increases, increases outside the yearly revision (js/checks.js).
+    if (!passes(checkRentChange(l, prop(l.propertyId), { from, rent, charges }, today()))) return;
     closeSheet();
     commit((s) => {
       const l = s.leases.find((x) => x.id === form.dataset.lease);
@@ -2234,6 +2285,8 @@ const forms = {
     const info = indexationStatus(l, prop(l.propertyId), irlTable(state), today());
     if (!info || info.state !== 'due') return;
     const from = f.get('applyFrom') || info.applyFrom;
+    // A revision is never backdated.
+    if (!passes(checkRevisionFrom(info, from))) return;
     closeSheet();
     commit((s) => {
       const x = s.leases.find((y) => y.id === l.id);
@@ -2257,6 +2310,8 @@ const forms = {
     if (amount === null) { toast(t('amountInvalid'), 'error'); return; }
     const id = form.dataset.id || uid();
     const data = { id, date: f.get('date'), amount, category: f.get('category'), propertyId: f.get('propertyId'), description: f.get('description').trim() };
+    const before = byId(state.expenses, id);
+    if ((!before || before.date !== data.date) && !passes(checkNotFuture('expense', data.date, today()))) return;
     commit((s) => {
       const i = s.expenses.findIndex((x) => x.id === id);
       if (i >= 0) s.expenses[i] = data; else s.expenses.push(data);
@@ -2530,6 +2585,7 @@ Object.assign(forms, {
   },
   insurance: (f, form) => {
     const until = f.get('until');
+    if (!passes(checkInsurance(until, today()))) return;
     closeSheet();
     commit((s) => { s.leases.find((x) => x.id === form.dataset.lease).insuranceUntil = until; });
     toast(t('saved'));
@@ -2564,6 +2620,7 @@ Object.assign(forms, {
     const { ses, led, st } = departureData(l);
     const date = f.get('date') || today();
     const amount = parseMoney(f.get('amount')) || 0;
+    if (!passes(checkNotFuture('depositReturned', date, today()))) return;
     closeSheet();
     // The penalty depends on the day the money actually went back.
     const final = departureStatement({ ...l, endDate: ses.keysDate }, led, { ...ses, returnedOn: date }, today());
@@ -2584,9 +2641,12 @@ Object.assign(forms, {
     const btn = form.querySelector('button[type=submit]');
     btn.disabled = true;
     const added = [];
+    const tooBig = [];
     try {
       for (const file of files) {
         const c = file.type.startsWith('image/') ? await compressImage(file) : { blob: file, type: file.type || 'application/octet-stream', name: file.name };
+        // Very large files weigh down every backup and can make the phone run out of memory.
+        if (c.blob.size > MAX_DOC_BYTES) { tooBig.push(t('docTooBig', { name: file.name, size: fmtSize(c.blob.size), max: fmtSize(MAX_DOC_BYTES) })); continue; }
         const data = await c.blob.arrayBuffer();
         const id = uid();
         await putFile(id, { name: c.name, type: c.type, data });
@@ -2601,11 +2661,15 @@ Object.assign(forms, {
       commit((s) => { s.documents.push(...added); });
       toast(t('docsAdded', { n: added.length }));
     }
+    if (tooBig.length) alert(tooBig.join('\n\n'));
   },
   diag: (f, form) => {
     const pid = form.dataset.property;
     const id = form.dataset.id || uid();
     const d = { id, type: f.get('type'), date: f.get('date'), expiry: f.get('expiry') || '' };
+    const p0 = prop(pid);
+    const before = p0 && (p0.diagnostics || []).find((x) => x.id === id);
+    if ((!before || before.date !== d.date) && !passes(checkNotFuture('diagnostic', d.date, today()))) return;
     closeSheet();
     commit((s) => {
       const p = s.properties.find((x) => x.id === pid);
@@ -2633,6 +2697,7 @@ Object.assign(forms, {
     const l = leaseOf(form.dataset.lease);
     const years = Number(f.get('years')) || null;
     const g = { name: f.get('name').trim(), address: f.get('address').trim(), solidaire: f.get('solidaire') === '1', years, maxAmount: parseMoney(f.get('maxAmount')) || 0 };
+    if (!passes(checkGuarantor(g))) return;
     makePdf(() => guarantorPdf(state, l, g, currentRent(l, today())));
   },
 });
@@ -2660,7 +2725,7 @@ Object.assign(changes, {
     const ses = sessions.reg[el.dataset.key];
     const k = el.dataset.f;
     if (k === 'updateProvision') ses.updateProvision = el.checked;
-    else if (k === 'newMonthly') ses.newMonthly = parseMoney(el.value) || 0;
+    else if (k === 'newMonthly') ses.newMonthly = Math.max(0, parseMoney(el.value) || 0);
     else ses[k] = el.value;
     render();
   },
@@ -2679,7 +2744,7 @@ Object.assign(changes, {
     const dl0 = leaseOf(el.dataset.lease);
     if (dl0.departure && dl0.departure.returnedOn) { render(); return; }
     const line = departureSession(leaseOf(el.dataset.lease)).deductions[Number(el.dataset.i)];
-    if (el.dataset.f === 'amount') line.amount = parseMoney(el.value) || 0;
+    if (el.dataset.f === 'amount') line.amount = Math.max(0, parseMoney(el.value) || 0);
     else line.label = el.value;
     persistDeparture(el.dataset.lease);
     render();
@@ -2711,7 +2776,7 @@ Object.assign(actions, {
   },
   syncNow: () => { clearTimeout(syncTimer); runSync(); },
   syncForce: () => {
-    if (!confirm(t('confirmSyncForce'))) return;
+    if (!confirm(t(syncMeta().lastError === 'shrink' ? 'confirmSyncShrink' : 'confirmSyncForce'))) return;
     syncMeta().forceNext = true;
     clearTimeout(syncTimer);
     runSync();
@@ -2735,7 +2800,7 @@ Object.assign(forms, {
     const token = (f.get('token') || '').trim();
     const passphrase = f.get('passphrase') || '';
     if (!repo) { toast(t('ghRepoInvalid'), 'error'); return; }
-    if (passphrase.length < 8) { toast(t('ghPassShort'), 'error'); return; }
+    if (passphrase.length < MIN_PASSPHRASE) { toast(t('ghPassShort', { n: MIN_PASSPHRASE }), 'error'); return; }
     if (passphrase !== f.get('passphrase2')) { toast(t('ghPassMismatch'), 'error'); return; }
     const btn = form.querySelector('button[type=submit]');
     btn.disabled = true;
