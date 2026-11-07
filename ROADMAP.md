@@ -214,7 +214,7 @@ Asked for on 7 Nov 2026 ("replace the handover checklist with setup steps"), aft
 
 ## Waiting on you
 
-- ✅ **GitHub backup set up** (5 Nov 2026) to the private repository `locatif-sauvegarde`. Passphrase on paper; revoke the token on GitHub if the phone is lost.
+- ✅ **GitHub backup set up** (5 Nov 2026) to the private repository `locatif-sauvegarde` (the owner's phone, test data only since 7 Nov 2026). Passphrase on paper; revoke the token on GitHub if the phone is lost.
 - ⏳ **Optional, fewer permission prompts for Claude:** add `.claude/settings.json` to this repository yourself (Claude isn't allowed to change its own permissions).
 - ❌ **Import files:** the Gestion Locative Facile export files aren't needed (milestone 5 dropped, 7 Nov 2026). The CIC and Crédit Agricole samples would only be needed if milestone 6 comes back (see [On hold](#on-hold)).
 - ⏳ **Recommended anyway: export the Gestion Locative Facile data before cancelling that subscription**, and keep the files privately (not in this repository), as a record of past rents, receipts and payments (for example if the tax office asks about an earlier year). On a computer: log in at immobilierloyer.com, tick Outils › Préférences › Réglages › Réglages avancés › "Export des données", then use **Exporter** on each page.
@@ -259,7 +259,7 @@ Asked for on 7 Nov 2026 ("replace the handover checklist with setup steps"), aft
 - ⏳ **Version 1.3.10 to check on the iPhone**
   - [ ] Settings › About shows 1.3.10
   - [ ] Settings › Setup and support › "Set up the app on the user's iPhone" shows the eight steps, with the app's address in step 4
-- ⏳ **GitHub backup for the user's iPhone** (7 Nov 2026), following those steps: a new private repository with its own token and passphrase, since the user starts from scratch and `locatif-sauvegarde` only holds test data. The owner's phone disconnects, then reconnects later as a support copy
+- ✅ **GitHub backup for the user's iPhone:** connected on 7 Nov 2026 to its own new private repository, with the data they had already entered. Still to do whenever convenient: the owner's phone disconnects from `locatif-sauvegarde` (test data only), then connects later as a support copy with a read-only token
 - ⏳ **Legal check, done once:** have the guarantor agreement, formal notice and deposit return letter reviewed, for example by your local ADIL. Questions to ask:
   - Guarantor agreement: since 2022 (article 2297 of the Civil Code), is the handwritten statement now complete (amount in figures and words; for a joint guarantee, the acknowledgment that the landlord need not pursue the tenant first)?
   - Rent revision claimed late: which IRL value applies, the latest published on the anniversary date or the latest published on the day of the request? Today the app uses the latest available on the day you tap, so with an anniversary just before INSEE publishes, a few days' difference changes the index used. Once answered, the app can follow the rule.
