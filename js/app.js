@@ -31,7 +31,7 @@ import {
 } from './checks.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.3.9';
+export const APP_VERSION = '1.3.10';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -742,7 +742,7 @@ function viewSettings() {
         <p class="hint">${esc(t('dataCounts', { p: state.properties.length, l: state.leases.length, pay: state.payments.length, e: state.expenses.length }))} · ${esc(t('docCount', { n: state.documents.length }))}</p>
       </section>
       ${snapshotsCard()}
-      ${handoverCard()}
+      ${setupCard()}
       <section class="card">
         <h3>${esc(t('about'))}</h3>
         <p class="hint">${esc(t('aboutText', { v: APP_VERSION }))}</p>
@@ -1767,11 +1767,14 @@ function ghTokenSheet() {
   </form>`);
 }
 
-function handoverCard() {
+// Setting up the user's iPhone from scratch (they enter their own data; it has
+// its own GitHub repository), then helping them through a support copy.
+function setupCard() {
+  const url = location.host + location.pathname; // the app's own address, wherever it is hosted
   return `<section class="card">
-    <h3>${esc(t('handoverTitle'))}</h3>
-    <details><summary>${esc(t('handoverHow'))}</summary>
-      <ol class="steps small">${[1, 2, 3, 4, 5, 6].map((i) => `<li>${esc(t('handover' + i))}</li>`).join('')}</ol>
+    <h3>${esc(t('setupTitle'))}</h3>
+    <details><summary>${esc(t('setupHow'))}</summary>
+      <ol class="steps small">${[1, 2, 3, 4, 5, 6, 7, 8].map((i) => `<li>${esc(t('setup' + i, { url }))}</li>`).join('')}</ol>
     </details>
     <p class="hint">${esc(t('supportExportHint'))}</p>
     <button class="btn secondary" data-action="supportExport">${esc(t('supportExport'))}</button>

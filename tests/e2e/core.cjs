@@ -35,6 +35,11 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await page.click('#sheet [data-action=sigSave]');
   await page.waitForSelector('#app .sig-preview');
   console.log('signature saved, sheet closed:', (await page.locator('#sheet').count()) === 0);
+  // setup steps for the user's iPhone (1.3.10): 8 steps, with the app's own address
+  const steps = await page.$$eval('details ol.steps li', (li) => li.map((x) => x.textContent));
+  const setup = steps.filter((x) => /new private repository|Read-only|Add to Home Screen/.test(x));
+  console.log('setup steps:', setup.length, '| app address in them:', steps.some((x) => x.includes('localhost:8080/')));
+  if (setup.length < 3 || !steps.some((x) => x.includes('localhost:8080/'))) throw new Error('setup steps missing from Settings');
   await shot('02-settings');
 
   // property

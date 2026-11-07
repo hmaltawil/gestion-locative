@@ -28,7 +28,7 @@ What's done and what's planned: see [ROADMAP.md](ROADMAP.md). Notes for develope
 - **Deadlines:** rent revisions, tenant insurance, diagnostic reports, lease term and notice dates, deposit return, charges reconciliation and your own reminders. Shown on the home screen and exportable to the iPhone Calendar as a .ics file.
 - **Diagnostic reports:** per property, with expiry dates filled in automatically.
 - **Documents:** photos and PDFs attached to properties, leases or expenses. Photos are resized, and everything is included in the backup.
-- **Handover and support:** each device connected to the GitHub backup is either the **main phone** (saves) or a **support copy** (never saves to GitHub, for looking at the user's data; a read-only token is enough). There's also an anonymised support file and a handover checklist in Settings.
+- **Setup and support:** each device connected to the GitHub backup is either the **main phone** (saves) or a **support copy** (never saves to GitHub, for looking at the user's data; a read-only token is enough). Settings › Setup and support lists the steps to set up the user's iPhone with its own backup repository, and makes an anonymised support file.
 - **Tenant departure:** the lease end (end of notice, when the rent stops) and the day the keys came back (start of the deposit deadline) are separate. Deposit return with deductions, unpaid rent, up to 20% held back for buildings with shared accounts, the 1- or 2-month legal deadline and the late penalty (added to the amount to return). Once the deposit is marked as returned, the account books the amount actually sent back: it ends at zero, at what the tenant still owes, or shows any difference.
 
 ## Where the data lives
