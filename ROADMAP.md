@@ -2,9 +2,9 @@
 
 One place to see what's done, what's waiting, and what comes next. Update it at the end of each milestone.
 
-**Status:** ✅ done · 🔜 next · ⏳ waiting on someone · ⏸️ on hold · 💡 idea, not planned yet
+**Status:** ✅ done · 🔜 next · ⏳ waiting on someone · ⏸️ on hold · ❌ dropped · 💡 idea, not planned yet
 
-**Where we are (7 Nov 2026):** milestones 1 to 4 are done, followed by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3), fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before), who paid on receipts, tenant or CAF (version 1.3.6), a warning for payments dated in the future (version 1.3.7) and a safety review (version 1.3.8: security, mistakes the app now questions, legal checks, backups). All of it is live and checked on the iPhone. A second code review (7 Nov 2026) brought version 1.3.9: long letters, the departure, erasing, share failures and legal points; it is live and checked on the iPhone. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL) and in the [Ideas](#ideas-backlog). **Next:** milestone 7, fixes from real use, as they come up. The two imports (milestones 5 and 6) are [on hold](#on-hold) since 6 Nov 2026: the user prefers to enter leases and payments by hand.
+**Where we are (7 Nov 2026):** milestones 1 to 4 are done, followed by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3), fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before), who paid on receipts, tenant or CAF (version 1.3.6), a warning for payments dated in the future (version 1.3.7) and a safety review (version 1.3.8: security, mistakes the app now questions, legal checks, backups). All of it is live and checked on the iPhone. A second code review (7 Nov 2026) brought version 1.3.9: long letters, the departure, erasing, share failures and legal points; it is live and checked on the iPhone. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL) and in the [Ideas](#ideas-backlog). **Next:** milestone 7, fixes from real use, as they come up. The user enters their own data on their own iPhone: there is no handover from the owner's phone and no import from Gestion Locative Facile (milestone 5 dropped on 7 Nov 2026). The tuned bank import (milestone 6) stays [on hold](#on-hold).
 
 ## How we work
 
@@ -211,8 +211,8 @@ Not done yet (the owner asked first how serious it is): the app's own web addres
 
 - ✅ **GitHub backup set up** (5 Nov 2026) to the private repository `locatif-sauvegarde`. Passphrase on paper; revoke the token on GitHub if the phone is lost.
 - ⏳ **Optional, fewer permission prompts for Claude:** add `.claude/settings.json` to this repository yourself (Claude isn't allowed to change its own permissions).
-- ⏸️ **Import files, on hold** (6 Nov 2026): the Gestion Locative Facile export files and the CIC and Crédit Agricole samples aren't needed while everything is entered by hand (see [On hold](#on-hold)).
-- ⏳ **Recommended anyway: export the Gestion Locative Facile data before cancelling that subscription**, and keep the files privately (not in this repository), in case something has to be checked or imported later. On a computer: log in at immobilierloyer.com, tick Outils › Préférences › Réglages › Réglages avancés › "Export des données", then use **Exporter** on each page.
+- ❌ **Import files:** the Gestion Locative Facile export files aren't needed (milestone 5 dropped, 7 Nov 2026). The CIC and Crédit Agricole samples would only be needed if milestone 6 comes back (see [On hold](#on-hold)).
+- ⏳ **Recommended anyway: export the Gestion Locative Facile data before cancelling that subscription**, and keep the files privately (not in this repository), as a record of past rents, receipts and payments (for example if the tax office asks about an earlier year). On a computer: log in at immobilierloyer.com, tick Outils › Préférences › Réglages › Réglages avancés › "Export des données", then use **Exporter** on each page.
 - ✅ **First check on the real iPhone:** everything works (5 Nov 2026)
   - [x] Add to Home Screen, then open from the icon
   - [x] Share menu: send a receipt by Mail
@@ -268,9 +268,9 @@ Not done yet (the owner asked first how serious it is): the app's own web addres
 
 ### On hold
 
-⏸️ **Put on hold on 6 Nov 2026:** the user prefers to enter leases and payments by hand. The plans are kept here in case that changes.
+⏸️ **Put on hold on 6 Nov 2026:** the user prefers to enter leases and payments by hand. **7 Nov 2026:** milestone 5 dropped, as the user enters their own data from scratch on their own iPhone; its plan is kept for reference. Milestone 6 stays on hold.
 
-### ⏸️ Milestone 5 · Import from Gestion Locative Facile
+### ❌ Milestone 5 · Import from Gestion Locative Facile (dropped 7 Nov 2026)
 Would need the CSV export files (format only, with names replaced).
 Goal: no retyping of the 15 leases.
 - [ ] Read the CSV files exported from immobilierloyer.com (Locataires, Contrats, Loyers et paiements, Charges et frais, Biens if offered)
@@ -323,7 +323,8 @@ Goal: a monthly routine of about 5 minutes. Download the bank file, import it, t
 - **Encrypted manual backup file** (from the safety review): the file saved in iCloud Drive holds all tenant data unencrypted; it could use the same passphrase as the GitHub backup
 - **App lock with Face ID or a PIN** (from the safety review): anyone holding the unlocked phone can open the app
 - **An automatic copy before deleting a payment or an expense** (from the safety review): today only the daily copy covers them
-- **The app's own web address** (from the code review of 7 Nov 2026): every site under `hmaltawil.github.io` shares the browser's storage, so another of the owner's sites there (Deutschlernen) could read this app's data in a browser where both are opened. On the user's iPhone the home-screen app has its own storage, which limits this. A custom domain or a GitHub account used only for this app fixes it; best done before the handover, since data has to be restored after a change of address
+- **The app's own web address** (from the code review of 7 Nov 2026): every site under `hmaltawil.github.io` shares the browser's storage, so another of the owner's sites there (Deutschlernen) could read this app's data in a browser where both are opened. On the user's iPhone the home-screen app has its own storage, which limits this. A custom domain or a GitHub account used only for this app fixes it; best done early, since the user's data has to be restored from a backup after a change of address
+- **Settings › Handover and support:** the checklist there describes copying the owner's data to the user's phone, which won't happen (7 Nov 2026). Replace it with setup steps for a phone that starts empty (new private repository, token, passphrase, then the owner's support copy), or remove it; the support copy and the anonymised support file stay
 - **The CAF's share on rent calls** (from milestone 6, on hold): when the CAF pays part of the rent directly, show what is expected from the CAF and what the tenant still pays
 
 ## Known limitations (current version)

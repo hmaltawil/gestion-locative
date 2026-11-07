@@ -5,7 +5,7 @@
 **Gestion locative** is an offline web app (PWA) that a private landlord in France uses on an iPhone to manage about 15 **unfurnished** rentals (location nue, régime réel, form 2044). It replaces a paid app, Gestion Locative Facile (made by Immobilier Loyer).
 
 - **Live:** https://hmaltawil.github.io/gestion-locative/. GitHub Pages deploys from `main`, folder `/`, a few minutes after each push.
-- **People:** the repository owner (GitHub `hmaltawil`) sets the app up and supports it. The day-to-day user is **another person**, who will get the app through the handover flow in Settings. The owner talks to Claude in English and wants plain explanations, not jargon.
+- **People:** the repository owner (GitHub `hmaltawil`) sets the app up and supports it. The day-to-day user is **another person**, who installs the app on their own iPhone and enters their own data from scratch: no handover from the owner's phone and no import from the old app (decided 7 Nov 2026). Their phone is the main phone of its own private GitHub backup repository; the owner's device is at most a support copy. The owner talks to Claude in English and wants plain explanations, not jargon.
 - **Language:** screens are in French or English (Settings). PDF documents are **always in French**, because they are legal documents.
 - **Status, what's next, and why:** see `ROADMAP.md`. It is the source of truth: read it first and update it at the end of every milestone.
 
@@ -14,7 +14,7 @@
 1. **One milestone at a time.** Agree the list before starting. New ideas go to the roadmap's Ideas section, not into the current milestone.
 2. **A milestone is done when:** `npm test` passes; the browser tests pass (`npm run serve`, then `npm run e2e` in another shell); `VERSION` in `sw.js`, `APP_VERSION` in `js/app.js` and `version` in `package.json` are bumped; README and ROADMAP are updated; it is pushed to `main` and the live `sw.js` shows the new version; the owner has checked it on the iPhone.
 3. **Bugs found on the iPhone** go to the top of the next milestone.
-4. **Privacy:** this repository is **public**. Never commit real tenant data, and never ask the owner to paste it. Work from format samples with names replaced. The bank and Gestion Locative Facile imports run on the phone with the real files.
+4. **Privacy:** this repository is **public**. Never commit real tenant data, and never ask the owner to paste it. Work from format samples with names replaced. The bank import runs on the phone with the real files.
 
 ## Architecture
 
@@ -88,5 +88,5 @@
 ## Current state (7 Nov 2026)
 - **Done:** milestones 1 to 4 (version 1.3.0), version 1.3.1 (fixes from a code review), versions 1.3.2 and 1.3.3 (screen polish), 1.3.4 (correcting a lease's rent from its edit form), 1.3.5 (a tap on a greyed-out Reminder or Formal notice explains why; the edit form shows the start of tracking), 1.3.6 (receipts say who paid, tenant or CAF), 1.3.7 (a payment dated in the future asks first) and 1.3.8 (safety review: cleaned restores, security rule, input and legal checks, backup pause). The owner's iPhone check passed for all of them. The GitHub backup is set up to the private repository `locatif-sauvegarde`.
 - **Version 1.3.9** (second code review, 7 Nov 2026): PDF tables paginate, departure keeps lease end and keys date apart, the deposit books the amount actually returned, honest erase plus "Remove everything from this device", failed share menus don't count, revision rounds down, "1.200" = 1 200 €, legal points (forfait, G/F/E homes, late reconciliation, undo), CSV and encryption hardening. Checked on the iPhone (7 Nov 2026). Open point kept in the roadmap's Ideas: the app shares the `hmaltawil.github.io` origin (and so browser storage) with the owner's Deutschlernen site.
-- **Next:** milestone 7, fixes from real use, as they come up. **On hold since 6 Nov 2026:** milestone 5 (import from Gestion Locative Facile) and milestone 6 (bank import tuned to CIC and Crédit Agricole), because the user prefers to enter everything by hand; their plans stay in the roadmap. With manual entry, leases already running need their start of tracking and earlier payments entered for a complete tax summary (tip in the roadmap's Known limitations).
+- **Next:** milestone 7, fixes from real use, as they come up. **Dropped on 7 Nov 2026:** milestone 5 (import from Gestion Locative Facile): the user enters their own data. **On hold since 6 Nov 2026:** milestone 6 (bank import tuned to CIC and Crédit Agricole); its plan stays in the roadmap. With manual entry, leases already running need their start of tracking and earlier payments entered for a complete tax summary (tip in the roadmap's Known limitations).
 - **Waiting:** the legal check by the ADIL (three letters, plus the questions listed in the roadmap: guarantor statement under article 2297, which IRL value applies to a late revision, the late-deposit penalty).
