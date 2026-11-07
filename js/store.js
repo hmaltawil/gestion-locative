@@ -3,6 +3,8 @@
 // off-site backup settings, which never go into backups or snapshots);
 // 'files' holds attached documents; 'snapshots' holds automatic copies.
 
+import { todayStr } from './util.js';
+
 const DB_NAME = 'gestion-locative';
 const STORE = 'kv';
 const FILES = 'files';
@@ -124,6 +126,14 @@ export function deleteSnapshot(id) {
   return tx(SNAPS, 'readwrite', (s) => s.delete(id));
 }
 
+// Everything on this device: the data and GitHub settings ('kv'), the
+// attached documents and the automatic copies.
+export async function eraseDeviceData() {
+  await tx(STORE, 'readwrite', (s) => s.clear());
+  await tx(FILES, 'readwrite', (s) => s.clear());
+  await tx(SNAPS, 'readwrite', (s) => s.clear());
+}
+
 // ---------- off-site backup settings (never part of the app data) ----------
 export async function loadSecrets() {
   return (await tx(STORE, 'readonly', (s) => s.get(SECRETS_KEY))) || {};
@@ -178,6 +188,12 @@ function cleanState(s) {
     for (const k of ['deposit', 'openingBalance']) if (k in l) l[k] = cleanNum(l[k]);
     l.tenants = objects(l.tenants);
     l.rents = objects(l.rents).filter((r) => cleanMonth(r.from)).map((r) => ({ ...r, rent: cleanNum(r.rent), charges: cleanNum(r.charges) }));
+    // Every screen counts on a start date: rebuild a missing one from the
+    // first rent, the start of tracking, or (last resort) today, rather than crash.
+    if (!l.startDate) {
+      const first = l.rents.map((r) => r.from).sort()[0] || l.trackFrom;
+      l.startDate = first ? `${first}-01` : todayStr();
+    }
     l.adjustments = objects(l.adjustments);
     for (const a of l.adjustments) { a.id = cleanId(a.id); a.date = cleanDate(a.date); a.amount = cleanNum(a.amount); }
     if (isObj(l.irl)) {
@@ -198,7 +214,10 @@ function cleanState(s) {
   s.reminders = objects(s.reminders);
   for (const r of s.reminders) { r.id = cleanId(r.id); r.date = cleanDate(r.date); r.propertyId = r.propertyId ? cleanId(r.propertyId) : ''; }
   s.documents = objects(s.documents);
-  for (const d of s.documents) { d.id = cleanId(d.id); d.ownerId = cleanId(d.ownerId); d.date = cleanDate(d.date); d.size = cleanNum(d.size); }
+  for (const d of s.documents) {
+    d.id = cleanId(d.id); d.ownerId = cleanId(d.ownerId); d.date = cleanDate(d.date); d.size = cleanNum(d.size);
+    d.name = cleanText(d.name) || 'document'; d.type = cleanText(d.type);
+  }
   s.trash = objects(s.trash);
   for (const d of s.trash) { d.id = cleanId(d.id); d.deletedOn = cleanDate(d.deletedOn); }
 }
@@ -242,16 +261,24 @@ function base64ToBuf(b64) {
 }
 
 // One JSON file with the data and, optionally, every attached document.
+// The documents are added one at a time as separate pieces of the file, so
+// the phone never holds every photo as one huge piece of text.
 export async function backupBlob(state, withFiles = true) {
-  const files = {};
+  const { files: _ignored, ...data } = state;
+  const head = JSON.stringify({ app: 'gestion-locative', exportedAt: new Date().toISOString(), ...data, files: {} });
+  const parts = [head.slice(0, -2)]; // ends with "files":{
+  let first = true;
   if (withFiles) {
     for (const d of state.documents) {
       const f = await getFile(d.id);
-      if (f) files[d.id] = { name: f.name, type: f.type, data: bufToBase64(f.data) };
+      if (!f) continue;
+      const meta = JSON.stringify({ name: f.name, type: f.type, data: '' }).slice(0, -2); // ends with "data":"
+      parts.push(new Blob([`${first ? '' : ','}${JSON.stringify(d.id)}:${meta}`, bufToBase64(f.data), '"}']));
+      first = false;
     }
   }
-  const data = { app: 'gestion-locative', exportedAt: new Date().toISOString(), ...state, files };
-  return new Blob([JSON.stringify(data)], { type: 'application/json' });
+  parts.push('}}');
+  return new Blob(parts, { type: 'application/json' });
 }
 
 export function parseBackup(text) {

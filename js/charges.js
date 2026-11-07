@@ -1,6 +1,6 @@
 // Yearly charges reconciliation and tenant departure (deposit return).
 
-import { addMonths, addYears, daysBetween, daysInMonth, periodOf } from './util.js';
+import { addMonths, daysBetween, daysInMonth, periodOf } from './util.js';
 import { dueForPeriod, currentRent } from './calc.js';
 
 function isLeap(y) {
@@ -120,16 +120,33 @@ export function departureStatement(lease, led, dep, today) {
 // applied to the account, and the money sent back from the account is a
 // refund. The account then ends at zero, or at what the tenant still owes.
 // The late penalty is the landlord's own cost, so it is not booked here.
-export function depositSettlement(st, deductions, keysDate, date) {
+// `returned` is the amount actually sent back (penalty included, as on the
+// statement); when it differs from the statement, the difference stays on the
+// tenant's account: still owed to them, or owed by them.
+export function depositSettlement(st, deductions, keysDate, date, returned = st.toReturn) {
   const adjustments = [];
   for (const d of deductions || []) {
     const amount = Number(d.amount) || 0;
     if (amount > 0) adjustments.push({ date: keysDate, label: d.label || 'Retenue sur dépôt', amount, kind: 'deduction' });
   }
-  if (st.refund > 0) adjustments.push({ date, label: 'Restitution du dépôt de garantie', amount: st.refund, kind: 'refund' });
+  const refund = Math.max(0, (Number(returned) || 0) - st.penalty);
+  if (refund > 0) adjustments.push({ date, label: 'Restitution du dépôt de garantie', amount: refund, kind: 'refund' });
   const applied = st.deposit - st.retention;
   const payment = applied > 0 ? { amount: applied, date, method: 'deposit', note: 'Dépôt de garantie imputé sur le compte' } : null;
   return { adjustments, payment };
+}
+
+// The rent entries without the new monthly charges set by the reconciliation
+// of `year`, with any entry it replaced put back (tests: fixes.test.mjs).
+export function undoRegRent(rents, year, rec) {
+  const change = rec && rec.rentChange;
+  const fromYear = (r) => r.reason === 'regularization' && (r.regYear === year || (change && r.from === change.from));
+  const out = rents.filter((r) => !fromYear(r));
+  const back = change && change.replaced;
+  if (back && /^\d{4}-\d{2}$/.test(String(back.from)) && !out.some((r) => r.from === back.from)) {
+    out.push({ ...back, rent: Number(back.rent) || 0, charges: Number(back.charges) || 0 });
+  }
+  return out.sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0));
 }
 
 // Other leases of the same property that run at the same time as this one
@@ -152,9 +169,15 @@ export function overlappingLeases(leases, lease, year) {
 // Unfurnished lease by a private landlord: 3-year terms, renewed tacitly.
 // A landlord's notice must reach the tenant at least 6 months before the term ends.
 export function nextTermEnd(lease, today) {
-  let end = addYears(lease.startDate, 3);
-  end = shiftDay(end, -1);
-  while (end < today) end = addYears(end, 3);
+  // Each term ends the day before an anniversary of the start date, counted
+  // from the start each time (so a leap year doesn't shift later terms).
+  const [y, m, d] = lease.startDate.split('-').map(Number);
+  const anniversary = (k) => (m === 2 && d === 29 && daysInMonth(y + 3 * k, 2) === 28
+    ? `${y + 3 * k}-03-01` // a lease from 29 February: the term ends on 28 February
+    : `${y + 3 * k}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
+  let k = 1;
+  let end = shiftDay(anniversary(k), -1);
+  while (end < today) { k++; end = shiftDay(anniversary(k), -1); }
   return { termEnd: end, noticeBy: addMonthsToDate(end, -6) };
 }
 

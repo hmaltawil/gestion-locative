@@ -62,6 +62,7 @@ export function latestForQuarter(table, quarter) {
 }
 
 export function fmtIrlKey(key, lang = 'fr') {
-  const [y, q] = key.split('-Q');
+  if (!key) return '—';
+  const [y, q] = String(key).split('-Q');
   return lang === 'fr' ? `${q}${q === '1' ? 'er' : 'e'} trimestre ${y}` : `Q${q} ${y}`;
 }

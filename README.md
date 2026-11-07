@@ -28,8 +28,8 @@ What's done and what's planned: see [ROADMAP.md](ROADMAP.md). Notes for develope
 - **Deadlines:** rent revisions, tenant insurance, diagnostic reports, lease term and notice dates, deposit return, charges reconciliation and your own reminders. Shown on the home screen and exportable to the iPhone Calendar as a .ics file.
 - **Diagnostic reports:** per property, with expiry dates filled in automatically.
 - **Documents:** photos and PDFs attached to properties, leases or expenses. Photos are resized, and everything is included in the backup.
-- **Handover and support:** each device connected to the GitHub backup is either the **main phone** (saves) or a **support copy** (read-only, for looking at the user's data). There's also an anonymised support file and a handover checklist in Settings.
-- **Tenant departure:** deposit return with deductions, unpaid rent, up to 20% held back for buildings with shared accounts, the 1- or 2-month legal deadline and the late penalty (added to the amount to return). Once the deposit is marked as returned, the tenant's account ends at zero or at what they still owe.
+- **Handover and support:** each device connected to the GitHub backup is either the **main phone** (saves) or a **support copy** (never saves to GitHub, for looking at the user's data; a read-only token is enough). There's also an anonymised support file and a handover checklist in Settings.
+- **Tenant departure:** the lease end (end of notice, when the rent stops) and the day the keys came back (start of the deposit deadline) are separate. Deposit return with deductions, unpaid rent, up to 20% held back for buildings with shared accounts, the 1- or 2-month legal deadline and the late penalty (added to the amount to return). Once the deposit is marked as returned, the account books the amount actually sent back: it ends at zero, at what the tenant still owes, or shows any difference.
 
 ## Where the data lives
 
@@ -37,11 +37,12 @@ All data, including attached documents, is stored on the device itself (IndexedD
 
 Three layers of protection:
 1. **Automatic copies on the phone** (Settings › Automatic copies): one a day for 14 days, plus one before every import, restore, deletion or erase. They undo mistakes, but they're lost with the phone.
-2. **Automatic backup to GitHub** (Settings › Automatic backup): after each change, an encrypted copy goes to a **private** repository of your own. It's encrypted on the phone with AES-256-GCM and a key derived from your passphrase (PBKDF2-SHA-256, 310,000 iterations), so GitHub only stores unreadable files, and every version is kept. The access token and passphrase stay on the phone and are never included in backups. **Keep the passphrase on paper:** without it the backups can't be read. If another phone has saved to the same repository in the meantime, this phone stops saving and asks you what to do, so one phone never silently erases the other's changes.
+2. **Automatic backup to GitHub** (Settings › Automatic backup): after each change, an encrypted copy goes to a **private** repository of your own. It's encrypted on the phone with AES-256-GCM and a key derived from your passphrase (PBKDF2-SHA-256, 600,000 iterations since version 1.3.9; older backups still open), so GitHub only stores unreadable files, and every version is kept. The access token and passphrase stay on the phone and are never included in backups. **Keep the passphrase on paper:** without it the backups can't be read. If another phone has saved to the same repository in the meantime, this phone stops saving and asks you what to do, so one phone never silently erases the other's changes.
 3. **Manual backup file** (Settings › Manual backup › Back up › Save to Files › iCloud Drive). The app reminds you if neither this nor the GitHub backup has run for 7 days.
 
 - **Deleting the home-screen icon deletes the data on the phone.** Restore from GitHub or from a backup file.
-- **Safety:** the app questions likely mistakes before saving (a payment dated in the future or far above what is owed, a backdated rent increase, dates years off) and refuses what the law forbids (a backdated revision, a rent increase on a property rated F or G). Restored files are cleaned before use, a browser security rule only lets the app's own code run, and the GitHub backup pauses rather than replacing a much fuller version.
+- **Erasing:** Settings › About › "Erase all data" can be undone (an automatic copy is kept for 14 days). "Remove everything from this device" really removes everything the app keeps on the phone, automatic copies and GitHub settings included; backup files and GitHub are not touched.
+- **Safety:** the app questions likely mistakes before saving (a payment dated in the future or far above what is owed, a backdated rent increase, dates years off, fixed charges outside a flat-share, a new lease on a home rated G, a deposit returned with a different amount than the statement) and refuses what the law forbids (a backdated revision, a rent increase on a property rated F or G). Rent revisions round down to the cent, never above the legal maximum. Restored files are cleaned before use, a browser security rule only lets the app's own code run, and the GitHub backup pauses rather than replacing a much fuller version.
 - **The home-screen app and Safari have separate storage.** Always open the app from its icon.
 
 ## Install on iPhone
@@ -91,4 +92,4 @@ PDF documents use the fonts built into jsPDF, which cover French and Western Eur
 
 ## Legal note
 
-The templates follow the French law of 6 July 1989 (articles 17-1 and 21). They are not legal advice: check the documents once, for example with your local ADIL.
+The templates follow the French law of 6 July 1989 (articles 15, 17-1, 21, 22, 22-1 and 23). They are not legal advice: check the documents once, for example with your local ADIL.

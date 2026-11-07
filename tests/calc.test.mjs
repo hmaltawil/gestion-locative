@@ -126,7 +126,8 @@ test('indexation: due, computed on the one-year IRL change', () => {
   assert.equal(info.anniversary, '2026-09-01');
   assert.equal(info.oldKey, '2025-Q2');
   assert.equal(info.newKey, '2026-Q2');
-  assert.equal(info.newRent, Math.round(80000 * 148.37 / 146.68));
+  // 809,2173… €: the law sets a maximum, so it rounds down (1.3.9).
+  assert.equal(info.newRent, Math.floor(80000 * 148.37 / 146.68));
   assert.equal(info.applyFrom, '2026-12');
   assert.equal(info.deadline, '2027-09-01');
 });

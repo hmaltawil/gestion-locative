@@ -81,12 +81,16 @@ export function fmtMoney(cents, { symbol = true } = {}) {
   return `${neg ? '-' : ''}${grouped},${rest}${symbol ? ' €' : ''}`;
 }
 
-// Accepts "1234.5", "1 234,50", "1234,5 €". Returns cents or null.
+// Accepts "1234.5", "1 234,50", "1234,5 €", "1.200" (= 1 200 €). Returns cents or null.
 export function parseMoney(input) {
   if (input === null || input === undefined) return null;
   let s = String(input).replace(/[\s\u00a0\u202f€]/g, '');
   if (s === '') return null;
-  if (s.includes(',') && s.includes('.')) {
+  if (/^-?[1-9]\d{0,2}([.,]\d{3})+$/.test(s) && !(s.includes(',') && s.includes('.'))) {
+    // "1.200", "12,500", "1.234.567": a euro amount never has 3 decimals, so
+    // these are thousands separators (1.200 typed for a 1 200 € deposit).
+    s = s.replace(/[.,]/g, '');
+  } else if (s.includes(',') && s.includes('.')) {
     // "1.234,56" or "1,234.56": the last separator is the decimal one.
     if (s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replace(/\./g, '').replace(',', '.');
     else s = s.replace(/,/g, '');

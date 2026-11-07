@@ -222,10 +222,12 @@ export function receivedFor(debt) {
 // named in the lease. Properties rated F or G (DPE) cannot be increased.
 export function revisionAnniversary(lease, today) {
   const mmdd = lease.revisionDate || (lease.startDate || today).slice(5);
+  const [mm, dd] = mmdd.split('-').map(Number);
+  // Each year on its own, so 29 February stays the 29th in leap years.
+  const at = (yr) => `${yr}-${pad2(mm)}-${pad2(Math.min(dd, daysInMonth(yr, mm)))}`;
   const y = Number(today.slice(0, 4));
-  let a = addYears(`${y}-${mmdd}`, 0);
-  if (a > today) a = addYears(a, -1);
-  return a;
+  const a = at(y);
+  return a > today ? at(y - 1) : a;
 }
 
 export function indexationStatus(lease, property, table, today) {
@@ -248,7 +250,9 @@ export function indexationStatus(lease, property, table, today) {
   const oldValue = table[oldKey];
   if (!oldValue) return { state: 'waiting', anniversary: a, next: addYears(a, 1) };
   const cur = currentRent(lease, today);
-  const newRent = Math.round((cur.rent * latest.value) / oldValue);
+  // The law sets a maximum, so round down to the cent (never above the cap).
+  // The tiny epsilon keeps exact results exact despite floating point.
+  const newRent = Math.floor((cur.rent * latest.value) / oldValue + 1e-9);
   const startFrom = a > today ? a : today;
   const applyFrom = startFrom.slice(8) === '01' ? periodOf(startFrom) : addMonths(periodOf(startFrom), 1);
   return {

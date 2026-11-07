@@ -8,7 +8,7 @@ import {
 } from './calc.js';
 import { fetchInseeIrl, fmtIrlKey, irlKey, irlTable, latestIrlKey } from './irl.js';
 import {
-  allFileIds, askPersistentStorage, backupBlob, deleteFile, deleteSnapshot, emptyState, getFile, getSnapshot, listSnapshots,
+  allFileIds, askPersistentStorage, backupBlob, deleteFile, deleteSnapshot, emptyState, eraseDeviceData, getFile, getSnapshot, listSnapshots,
   loadSecrets, loadState, normalize, parseBackup, putFile, putSnapshot, restoreFiles, saveSecrets, saveState,
 } from './store.js';
 import { counts as snapCounts, expiredTrash, needsDaily, toPrune } from './snapshots.js';
@@ -21,17 +21,17 @@ import {
   reminderPdf, rentCallPdf, rentCertificatePdf, shareFile, taxSummaryPdf,
 } from './docs.js';
 import { guessMapping, isHousingAidLabel, knownLabels, manualDuplicates, parseCsv, suggestLease, toTransactions } from './bank.js';
-import { departureStatement, depositSettlement, overlappingLeases, recoverableExpenses, regularization } from './charges.js';
+import { departureStatement, depositSettlement, overlappingLeases, recoverableExpenses, regularization, undoRegRent } from './charges.js';
 import { LINE_2044, taxSummary, yearCsv } from './tax.js';
 import { buildIcs, deadlines, defaultExpiry } from './deadlines.js';
 import { anonymize } from './support.js';
 import {
-  MAX_DOC_BYTES, MIN_PASSPHRASE, backupShrinks, checkGuarantor, checkInsurance, checkLease, checkNotFuture, checkPayment, checkRentChange,
-  checkRevisionFrom, reminderSentSinceLate,
+  DPE_BAN, MAX_DOC_BYTES, MIN_PASSPHRASE, backupShrinks, checkDepositReturned, dpeBanned, checkGuarantor, checkInsurance, checkLease, checkNotFuture, checkPayment,
+  checkRentChange, checkRevisionFrom, reminderSentSinceLate,
 } from './checks.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.3.8';
+export const APP_VERSION = '1.3.9';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -110,7 +110,7 @@ function page({ title, back, action, body }) {
 }
 
 function addBtn(href) {
-  return `<a class="icon-btn" href="${href}" aria-label="${esc(t('add'))}">${icon('plus')}</a>`;
+  return `<a class="icon-btn" href="${esc(href)}" aria-label="${esc(t('add'))}">${icon('plus')}</a>`;
 }
 
 const STATUS_CLASS = { paid: 'ok', partial: 'warn', unpaid: 'bad', upcoming: 'muted', late: 'bad' };
@@ -357,6 +357,7 @@ function viewProperty(r) {
           <dt>${esc(t('dpe'))}</dt><dd>${esc(p.dpe || t('unknown'))}</dd>
           ${p.notes ? `<dt>${esc(t('notes'))}</dt><dd class="pre">${esc(p.notes)}</dd>` : ''}
         </dl>
+        ${dpeBanned(p.dpe, today()) ? `<p class="note warn">${esc(t('dpeIndecentNote', { dpe: p.dpe, date: fmtDate(DPE_BAN[p.dpe]) }))}</p>` : ''}
         ${p.dpe === 'F' || p.dpe === 'G' ? `<p class="note warn">${esc(t('dpeFrozen'))}</p>` : ''}
       </section>
       <section class="card flush">
@@ -508,7 +509,7 @@ function viewLease(r) {
           ${l.deposit ? `<dt>${esc(t('deposit'))}</dt><dd>${fmtMoney(l.deposit)}</dd>` : ''}
           ${l.guarantor ? `<dt>${esc(t('guarantor'))}</dt><dd>${esc(l.guarantor)}</dd>` : ''}
           <dt>${esc(t('insuranceUntil'))}</dt><dd>${l.insuranceUntil ? fmtDate(l.insuranceUntil) : `<button class="link" data-action="insuranceUpdate" data-lease="${l.id}">${esc(t('setDate'))}</button>`}</dd>
-          <dt>${esc(t('irlRef'))}</dt><dd>${l.irl && l.irl.quarter ? esc(t('irlRefValue', { q: l.irl.quarter, key: fmtIrlKey(l.irl.key, lang), value: l.irl.value })) : esc(t('none'))}</dd>
+          <dt>${esc(t('irlRef'))}</dt><dd>${!l.irl || !l.irl.quarter ? esc(t('none')) : l.irl.key ? esc(t('irlRefValue', { q: l.irl.quarter, key: fmtIrlKey(l.irl.key, lang), value: l.irl.value })) : esc(t('quarterN', { n: l.irl.quarter }))}</dd>
           ${l.lastRevision ? `<dt>${esc(t('lastRevision'))}</dt><dd>${fmtDate(l.lastRevision)}</dd>` : ''}
           ${(l.tenants || []).map((x) => `<dt>${esc(t('tenant'))}</dt><dd>${esc(x.name)}${x.email ? `<br><a href="mailto:${esc(x.email)}">${esc(x.email)}</a>` : ''}${x.phone ? `<br><a href="tel:${esc(x.phone)}">${esc(x.phone)}</a>` : ''}</dd>`).join('')}
           ${l.notes ? `<dt>${esc(t('notes'))}</dt><dd class="pre">${esc(l.notes)}</dd>` : ''}
@@ -621,9 +622,11 @@ const LINE_LABELS_FR = {
 
 function viewExpenses(r) {
   const td = today();
-  const year = r.query.get('year') || td.slice(0, 4);
-  const pid = r.query.get('property') || '';
-  const years = new Set([td.slice(0, 4), ...state.expenses.map((e) => e.date.slice(0, 4))]);
+  // Values from the address bar: only a real year and a real property are used.
+  const qy = r.query.get('year') || '';
+  const year = /^\d{4}$/.test(qy) ? qy : td.slice(0, 4);
+  const pid = prop(r.query.get('property')) ? r.query.get('property') : '';
+  const years = new Set([td.slice(0, 4), year, ...state.expenses.map((e) => e.date.slice(0, 4))]);
   const list = state.expenses
     .filter((e) => e.date.startsWith(year) && (!pid || e.propertyId === pid))
     .sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -744,6 +747,9 @@ function viewSettings() {
         <h3>${esc(t('about'))}</h3>
         <p class="hint">${esc(t('aboutText', { v: APP_VERSION }))}</p>
         <button class="btn danger ghost" data-action="wipe">${esc(t('wipe'))}</button>
+        <p class="hint">${esc(t('wipeHint'))}</p>
+        <button class="btn danger ghost" data-action="eraseDevice">${esc(t('eraseDevice'))}</button>
+        <p class="hint">${esc(t('eraseDeviceHint'))}</p>
       </section>`,
   });
 }
@@ -876,7 +882,8 @@ function viewBatch(r) {
   const cur = periodOf(td);
   const type = r.query.get('type') === 'rentCall' ? 'rentCall' : 'receipt';
   const def = type === 'receipt' ? cur : (Number(td.slice(8)) >= 15 ? addMonths(cur, 1) : cur);
-  const period = r.query.get('period') || def;
+  const qp = r.query.get('period') || '';
+  const period = /^\d{4}-(0[1-9]|1[0-2])$/.test(qp) ? qp : def; // from the address bar: a real month only
   const options = [-3, -2, -1, 0, 1].map((n) => addMonths(cur, n));
   if (!options.includes(period)) options.push(period);
   const lang = state.settings.lang;
@@ -899,7 +906,7 @@ function viewBatch(r) {
       <div class="row-main"><strong>${esc(tenantsLabel(l))}</strong><span class="muted">${esc(propName(prop(l.propertyId)))}${email ? '' : ' · ' + esc(t('noEmailShort'))}</span>
       ${sent ? `<span class="ok-text small">${icon('check', 'tiny')} ${esc(t('sentOn', { date: fmtDate(sent) }))}</span>` : ''}</div>
       <div class="row-side">${status}</div>
-      ${btn ? `<button class="btn small${sent ? ' secondary' : ''}" data-action="batchSend" data-type="${type}" data-lease="${l.id}" data-period="${period}">${esc(btn === 'partial' ? t('partialShort') : t('send'))}</button>` : '<span class="icon-btn-space"></span>'}
+      ${btn ? `<button class="btn small${sent ? ' secondary' : ''}" data-action="batchSend" data-type="${type}" data-lease="${l.id}" data-period="${esc(period)}">${esc(btn === 'partial' ? t('partialShort') : t('send'))}</button>` : '<span class="icon-btn-space"></span>'}
     </li>`;
   }).join('');
   return page({
@@ -907,13 +914,13 @@ function viewBatch(r) {
     back: '#/',
     body: `
       <div class="segmented">
-        <a href="#/batch?type=receipt&period=${period}" class="${type === 'receipt' ? 'active' : ''}">${esc(t('receipts'))}</a>
+        <a href="#/batch?type=receipt&period=${esc(period)}" class="${type === 'receipt' ? 'active' : ''}">${esc(t('receipts'))}</a>
         <a href="#/batch?type=rentCall&period=${addMonths(cur, Number(td.slice(8)) >= 15 ? 1 : 0)}" class="${type === 'rentCall' ? 'active' : ''}">${esc(t('rentCalls'))}</a>
       </div>
       <div class="filters one">${select('period', options.sort().map((p) => [p, fmtPeriodCap(p, lang)]), period, `data-change="batchPeriod" data-type="${type}"`)}</div>
       <p class="hint">${esc(t('batchHint'))}</p>
       <section class="card flush">${list.length ? `<ul class="list cols">${rows}</ul>` : empty(t('noActiveLeases'))}</section>
-      ${ready ? `<button class="btn block secondary" data-action="batchAll" data-type="${type}" data-period="${period}">${icon('doc')} ${esc(t('allInOne', { n: ready }))}</button>` : ''}`,
+      ${ready ? `<button class="btn block secondary" data-action="batchAll" data-type="${type}" data-period="${esc(period)}">${icon('doc')} ${esc(t('allInOne', { n: ready }))}</button>` : ''}`,
   });
 }
 
@@ -1058,6 +1065,7 @@ function viewRegularize(r) {
       <p class="subtitle">${esc(tenantsLabel(l))} · ${esc(propName(prop(l.propertyId)))}</p>
       ${l.chargesType === 'forfait' ? `<p class="note warn">${esc(t('regForfait'))}</p>` : ''}
       ${overlappingLeases(state.leases, l, year).length ? `<p class="note warn">${esc(t('regOverlap', { year }))}</p>` : ''}
+      ${td > `${year + 1}-12-31` && reg.balance > 0 ? `<p class="note warn">${esc(t('regLate', { year, next: year + 1, monthly: fmtMoney(Math.ceil(reg.balance / 12)) }))}</p>` : ''}
       ${done ? `<div class="note ok">${esc(t('regDone', { date: fmtDate(done.date), amount: fmtMoney(done.balance) }))} <button class="link danger" data-action="regUndo" data-lease="${l.id}" data-year="${year}">${esc(t('undo'))}</button></div>` : ''}
       <div class="filters one">${select('year', years, year, `data-change="regYear" data-lease="${l.id}"`)}</div>
       <section class="card">
@@ -1097,6 +1105,8 @@ function departureSession(l) {
   if (!sessions.dep[l.id]) {
     const dep = l.departure || {};
     sessions.dep[l.id] = {
+      // The lease ends when the notice ends; the keys can come back earlier.
+      endDate: l.endDate || dep.keysDate || today(),
       keysDate: dep.keysDate || l.endDate || today(),
       inventoryMatches: dep.inventoryMatches !== false,
       deductions: (dep.deductions || []).map((x) => ({ ...x })),
@@ -1107,9 +1117,22 @@ function departureSession(l) {
   return sessions.dep[l.id];
 }
 
+// What is kept in lease.departure (the lease end itself is lease.endDate).
+function departureRecord(ses) {
+  return {
+    keysDate: ses.keysDate,
+    inventoryMatches: ses.inventoryMatches,
+    deductions: ses.deductions.map((z) => ({ ...z })),
+    retention: ses.retention,
+    newAddress: ses.newAddress,
+  };
+}
+
 function departureData(l) {
   const ses = departureSession(l);
-  const tmp = { ...l, endDate: ses.keysDate };
+  // Rent is due until the lease ends (the end of the notice), even when the
+  // keys come back earlier: article 15 of the law of 6 July 1989.
+  const tmp = { ...l, endDate: ses.endDate || ses.keysDate };
   const led = ledger(tmp, state.payments, today());
   // Once the deposit is returned the ledger already includes the deductions,
   // so show the statement as it was at that moment.
@@ -1124,7 +1147,7 @@ function viewDeparture(r) {
   const td = today();
   const { ses, st } = departureData(l);
   const dep = l.departure || {};
-  const saved = l.endDate && l.endDate === ses.keysDate && dep.keysDate;
+  const saved = l.endDate && l.endDate === ses.endDate && dep.keysDate && dep.keysDate === ses.keysDate;
   const returned = dep.returnedOn;
   return page({
     title: t('departureTitle'),
@@ -1134,10 +1157,11 @@ function viewDeparture(r) {
       ${returned ? `<div class="note ok">${esc(t('depositReturnedOn', { date: fmtDate(returned), amount: fmtMoney(dep.returnedAmount || 0) }))}</div>` : ''}
       <fieldset class="card form" ${returned ? 'disabled' : ''}>
         <h3>${esc(t('moveOut'))}</h3>
+        ${field(t('leaseEndDate'), input('endDate', ses.endDate, `type="date" data-change="depField" data-lease="${l.id}" data-f="endDate"`), t('leaseEndHint'))}
         ${field(t('keysDate'), input('keysDate', ses.keysDate, `type="date" data-change="depField" data-lease="${l.id}" data-f="keysDate"`), t('keysDateHint'))}
         <label class="check"><input type="checkbox" ${ses.inventoryMatches ? 'checked' : ''} data-change="depField" data-lease="${l.id}" data-f="inventoryMatches"> ${esc(t('inventoryMatches'))}</label>
         ${field(t('newAddress'), input('newAddress', ses.newAddress, `data-change="depField" data-lease="${l.id}" data-f="newAddress"`))}
-        ${saved ? '' : `<button class="btn block" data-action="depSave" data-lease="${l.id}">${esc(t('endLeaseOn', { date: fmtDate(ses.keysDate) }))}</button>`}
+        ${saved ? '' : `<button class="btn block" data-action="depSave" data-lease="${l.id}">${esc(t('endLeaseOn', { date: fmtDate(ses.endDate) }))}</button>`}
       </fieldset>
       <fieldset class="card" ${returned ? 'disabled' : ''}>
         <h3>${esc(t('deductions'))}</h3>
@@ -1164,7 +1188,7 @@ function viewDeparture(r) {
         <div class="spacer"></div>
         ${st.stillOwed > 0 ? `<div class="balance bad"><span>${esc(t('tenantStillOwes'))}</span><strong>${fmtMoney(st.stillOwed)}</strong></div>` : `<div class="balance ok"><span>${esc(t('toReturn'))}</span><strong>${fmtMoney(st.toReturn)}</strong></div>`}
         <p class="${!returned && td > st.deadline ? 'note warn' : 'hint'}">${esc(t('depositDeadline', { date: fmtDate(st.deadline), months: ses.inventoryMatches ? 1 : 2 }))}${!returned && st.penalty ? ' ' + esc(t('latePenalty', { n: st.lateMonths, amount: fmtMoney(st.penalty) })) : ''}</p>
-        ${ses.keysDate > td ? `<p class="hint">${esc(t('futureDepartureHint'))}</p>` : ''}
+        ${ses.keysDate > td || ses.endDate > td ? `<p class="hint">${esc(t('futureDepartureHint'))}</p>` : ''}
         <div class="btn-row">
           <button class="btn secondary" data-action="depPdf" data-lease="${l.id}">${icon('doc')} ${esc(t('statementPdf'))}</button>
           ${saved && !returned ? `<button class="btn" data-action="depReturned" data-lease="${l.id}">${esc(t('markReturned'))}</button>` : ''}
@@ -1215,6 +1239,7 @@ function viewTax(r) {
         </ul>
         <p class="note">${esc(s.microEligible ? t('microYes', { amount: fmtMoney(s.microTaxable) }) : t('microNo'))}</p>
         ${s.notDeductible ? `<p class="hint">${esc(t('notDeductible', { amount: fmtMoney(s.notDeductible) }))}</p>` : ''}
+        ${s.forfaitCharges ? `<p class="note warn">${esc(t('taxForfait', { amount: fmtMoney(s.forfaitCharges) }))}</p>` : ''}
         <p class="hint">${esc(t('taxHint'))}</p>
       </section>
       <form class="card form" data-form="taxLine230" data-year="${year}">
@@ -1463,11 +1488,16 @@ async function restoreSnapshot(id) {
   const snap = await getSnapshot(id);
   if (!snap) return;
   if (!confirm(t('confirmSnapRestore', { date: fmtDateTime(snap.at), ...snap.counts }))) return;
-  await takeSnapshot('beforeRestore');
-  state = normalize(snap.state);
-  setLang(state.settings.lang);
-  applyTheme(state.settings.theme);
-  await persist();
+  await holdSync();
+  try {
+    await takeSnapshot('beforeRestore');
+    state = normalize(snap.state);
+    setLang(state.settings.lang);
+    applyTheme(state.settings.theme);
+    await persist();
+  } finally {
+    releaseSync();
+  }
   afterChange();
   location.hash = '#/';
   render();
@@ -1478,6 +1508,21 @@ async function restoreSnapshot(id) {
 let syncTimer = null;
 let syncing = false;
 let syncAgain = false;
+let syncHeld = 0;
+
+// While data is being restored, no automatic backup starts (it would upload
+// the data being replaced). Waits for one already running to finish, but not
+// more than 15 seconds (a stalled connection must not block the restore).
+async function holdSync() {
+  syncHeld++;
+  clearTimeout(syncTimer);
+  for (let waited = 0; syncing && waited < 15000; waited += 200) await new Promise((r) => setTimeout(r, 200));
+}
+
+function releaseSync() {
+  syncHeld = Math.max(0, syncHeld - 1);
+  if (!syncHeld && gh() && !isViewer() && syncMeta().dirty) scheduleSync();
+}
 
 function markDirty() {
   if (!gh() || isViewer()) return;
@@ -1494,7 +1539,7 @@ function scheduleSync(delay = 8000) {
 
 async function runSync() {
   const g = gh();
-  if (!g || g.mode === 'viewer') return;
+  if (!g || g.mode === 'viewer' || syncHeld) return;
   if (syncing) { syncAgain = true; return; }
   syncing = true;
   syncAgain = false;
@@ -1675,6 +1720,7 @@ async function ghRestoreVersion(sha) {
   const g = gh();
   const cfg = { repo: g.repo, token: g.token };
   toast(t('ghLoading'));
+  await holdSync();
   try {
     const text = await readFile(cfg, DATA_PATH, sha);
     if (!text) throw new SyncError('unknown');
@@ -1708,6 +1754,8 @@ async function ghRestoreVersion(sha) {
     toast(missing ? t('ghDocsMissing', { n: missing }) : t('ghRestored'));
   } catch (e) {
     toast(t('syncErr_' + ((e && e.code) || (e && e.message) || 'unknown')), 'error');
+  } finally {
+    releaseSync();
   }
 }
 
@@ -1914,7 +1962,7 @@ function chkParams(p = {}) {
     if (v === null || v === undefined) continue;
     if (k === 'date') out[k] = fmtDate(v);
     else if (k === 'month') out[k] = fmtPeriod(v, state.settings.lang);
-    else if (['amount', 'owed', 'rent', 'max', 'from', 'to'].includes(k)) out[k] = fmtMoney(v);
+    else if (['amount', 'owed', 'rent', 'max', 'from', 'to', 'expected', 'diff'].includes(k)) out[k] = fmtMoney(v);
     else out[k] = v;
   }
   return out;
@@ -1929,16 +1977,45 @@ function passes(check) {
 
 // ---------------------------------------------------------------- PDF helpers
 
+// The share menu, or a download where there is none. 'fallback' means the
+// share menu failed and the file was offered as a download instead: it may not
+// have been saved, so it never counts as saved or sent.
+const delivered = (res) => res === 'shared' || res === 'downloaded';
+async function share(blob, name, type) {
+  const res = await shareFile(blob, name, type);
+  if (res === 'fallback') toast(t('shareFallback'), 'error');
+  return res;
+}
+
 async function makePdf(build) {
   if (!window.jspdf) { toast(t('pdfLibMissing'), 'error'); return; }
   if (!state.settings.landlord.name) toast(t('missingLandlordShort'));
   try {
-    return await deliver(build());
+    const res = await deliver(build());
+    if (res === 'fallback') toast(t('shareFallback'), 'error');
+    return res;
   } catch (e) {
     console.error(e);
     toast(t('pdfError'), 'error');
     return null;
   }
+}
+
+// Earlier years whose tax summary would lose payments if these leases went: "2024, 2025".
+function pastPaymentYears(leaseIds) {
+  const cur = today().slice(0, 4);
+  const years = new Set(state.payments.filter((x) => leaseIds.has(x.leaseId) && x.date.slice(0, 4) < cur).map((x) => x.date.slice(0, 4)));
+  return [...years].sort().join(', ');
+}
+
+// The manual backup file only counts as made when it surely reached the share
+// menu (or a download on a computer); after a failed share menu, ask.
+function backupShared(res) {
+  if (res === 'cancelled') return;
+  if (delivered(res) || (res === 'fallback' && confirm(t('backupFallbackAsk')))) {
+    commit((s) => { s.settings.lastBackup = today(); });
+    toast(t('backupDone'));
+  } else toast(t('backupNotSaved'), 'error');
 }
 
 // ---------------------------------------------------------------- actions
@@ -1965,7 +2042,7 @@ const actions = {
     closeSheet();
     const res = await makePdf(() => reminderPdf(state, l, led));
     // Remembered, so the formal notice can tell whether a reminder came first.
-    if (res && res !== 'cancelled') commit((s) => { s.sent[`reminder:${l.id}`] = today(); });
+    if (delivered(res)) commit((s) => { s.sent[`reminder:${l.id}`] = today(); });
   },
   notice: (d) => {
     const l = leaseOf(d.lease);
@@ -1997,8 +2074,10 @@ const actions = {
   },
   deleteProperty: async (d) => {
     const n = leasesFor(d.id).length;
-    if (!confirm(n ? t('confirmDeletePropertyLeases', { n }) : t('confirmDeleteProperty'))) return;
     const leaseIds = new Set(leasesFor(d.id).map((l) => l.id));
+    const years = pastPaymentYears(leaseIds);
+    const msg = !n ? t('confirmDeleteProperty') : years ? t('confirmDeletePropertyTax', { n, years }) : t('confirmDeletePropertyLeases', { n });
+    if (!confirm(msg)) return;
     await takeSnapshot('delete');
     commit((s) => {
       s.properties = s.properties.filter((x) => x.id !== d.id);
@@ -2010,7 +2089,8 @@ const actions = {
     location.hash = '#/properties';
   },
   deleteLease: async (d) => {
-    if (!confirm(t('confirmDeleteLease'))) return;
+    const years = pastPaymentYears(new Set([d.id]));
+    if (!confirm(years ? t('confirmDeleteLeaseTax', { years }) : t('confirmDeleteLease'))) return;
     await takeSnapshot('delete');
     commit((s) => {
       s.leases = s.leases.filter((x) => x.id !== d.id);
@@ -2065,10 +2145,7 @@ const actions = {
     if (prepared && prepared.count === commitCount) {
       // Ready in advance: the share menu opens straight away.
       const res = await shareFile(prepared.blob, name, 'application/json');
-      if (res !== 'cancelled') {
-        commit((s) => { s.settings.lastBackup = today(); });
-        toast(t('backupDone'));
-      }
+      backupShared(res);
       return;
     }
     const blob = await backupBlob(state, true);
@@ -2080,11 +2157,8 @@ const actions = {
     const wrap = el.closest('.sheet-wrap');
     const name = `gestion-locative-sauvegarde-${today()}.json`;
     const res = await shareFile(wrap.blob, name, 'application/json');
-    if (res !== 'cancelled') {
-      closeSheet();
-      commit((s) => { s.settings.lastBackup = today(); });
-      toast(t('backupDone'));
-    }
+    if (res !== 'cancelled') closeSheet();
+    backupShared(res);
   },
   restore: () => {
     const inp = document.createElement('input');
@@ -2098,12 +2172,17 @@ const actions = {
         if (next.anonymised && !confirm(t('confirmRestoreAnon'))) return;
         const msg = t('confirmRestore', { p: next.properties.length, l: next.leases.length, pay: next.payments.length });
         if (!confirm(msg)) return;
-        await takeSnapshot('beforeRestore');
-        await restoreFiles(files);
-        state = next;
-        setLang(state.settings.lang);
-        applyTheme(state.settings.theme);
-        await persist();
+        await holdSync();
+        try {
+          await takeSnapshot('beforeRestore');
+          await restoreFiles(files);
+          state = next;
+          setLang(state.settings.lang);
+          applyTheme(state.settings.theme);
+          await persist();
+        } finally {
+          releaseSync();
+        }
         afterChange();
         location.hash = '#/';
         render();
@@ -2131,6 +2210,26 @@ const actions = {
     commitCount++;
     location.hash = '#/';
     render();
+  },
+  // Everything this app keeps on the device: data, automatic copies, documents,
+  // the GitHub settings and the theme. Nothing can be brought back afterwards
+  // (except from a backup file or GitHub, which this doesn't touch).
+  eraseDevice: async () => {
+    const word = state.settings.lang === 'fr' ? 'TOUT EFFACER' : 'ERASE ALL';
+    const answer = prompt(t('eraseDeviceConfirm', { word }));
+    if (answer !== word) return;
+    await holdSync(); // no backup upload writes its settings back afterwards
+    secrets = {};
+    try {
+      await eraseDeviceData();
+      try { localStorage.removeItem('gl-theme'); } catch (e) { /* private mode */ }
+      if ('caches' in window) await caches.delete('gl-export');
+    } catch (e) {
+      toast(t('eraseDeviceFailed'), 'error');
+      return;
+    }
+    location.hash = '#/';
+    location.reload();
   },
 };
 
@@ -2202,7 +2301,7 @@ const forms = {
     const rentHC = parseMoney(f.get('rent'));
     // Negative amounts, a mistyped year, insurance or revision dates far ahead,
     // a deposit above one month's rent (js/checks.js).
-    if (!passes(checkLease({ ...data, rent: rentHC, charges: parseMoney(f.get('charges')) }, today(), existing))) return;
+    if (!passes(checkLease({ ...data, rent: rentHC, charges: parseMoney(f.get('charges')) }, today(), existing, prop(data.propertyId)))) return;
     // A corrected rent or charges amount (typing mistake) on an existing lease.
     let correction = null;
     if (existing) {
@@ -2404,7 +2503,7 @@ Object.assign(actions, {
   },
   icsShare: (d, el) => {
     const wrap = el.closest('.sheet-wrap');
-    if (wrap && wrap.blob) shareFile(wrap.blob, 'echeances-locatives.ics', 'text/calendar');
+    if (wrap && wrap.blob) share(wrap.blob, 'echeances-locatives.ics', 'text/calendar');
   },
 
   // monthly batch
@@ -2416,7 +2515,7 @@ Object.assign(actions, {
     if (!built) return;
     toast(email ? t('emailCopied', { email }) : t('noEmail'));
     const res = await makePdf(() => built);
-    if (res && res !== 'cancelled') commit((s) => { s.sent[`${d.type}:${l.id}:${d.period}`] = today(); });
+    if (delivered(res)) commit((s) => { s.sent[`${d.type}:${l.id}:${d.period}`] = today(); });
   },
   batchAll: (d) => {
     const list = leasesInPeriod(d.period);
@@ -2487,6 +2586,7 @@ Object.assign(actions, {
     const reg = regularization(l, Number(d.year), ses.lines);
     makePdf(() => regularizationPdf(state, l, reg, ses.lines.filter((x) => x.amount), {
       dueDate: ses.dueDate,
+      late: today() > `${Number(d.year) + 1}-12-31`,
       newMonthly: ses.updateProvision && isActive(l, today()) ? ses.newMonthly : null,
       newFrom: ses.newFrom || periodOf(ses.dueDate),
     }));
@@ -2497,6 +2597,7 @@ Object.assign(actions, {
     commit((s) => {
       const l = s.leases.find((x) => x.id === d.lease);
       l.adjustments = (l.adjustments || []).filter((a) => !(a.kind === 'regularization' && a.regYear === y));
+      l.rents = undoRegRent(l.rents || [], y, l.regularizations && l.regularizations[y]);
       if (l.regularizations) delete l.regularizations[y];
     });
   },
@@ -2505,11 +2606,11 @@ Object.assign(actions, {
   depSave: (d) => {
     const l = leaseOf(d.lease);
     const ses = departureSession(l);
-    if (ses.keysDate < l.startDate) { toast(t('endBeforeStart'), 'error'); return; }
+    if (!ses.endDate || !ses.keysDate || ses.endDate < l.startDate || ses.keysDate < l.startDate) { toast(t('endBeforeStart'), 'error'); return; }
     commit((s) => {
       const x = s.leases.find((y) => y.id === l.id);
-      x.endDate = ses.keysDate;
-      x.departure = { ...(x.departure || {}), ...ses, deductions: ses.deductions.map((z) => ({ ...z })) };
+      x.endDate = ses.endDate;
+      x.departure = { ...(x.departure || {}), ...departureRecord(ses) };
     });
     toast(t('saved'));
   },
@@ -2531,7 +2632,7 @@ Object.assign(actions, {
   },
   taxCsv: (d) => {
     const csv = yearCsv(state, Number(d.year));
-    shareFile(new Blob([csv], { type: 'text/csv' }), `comptes-locatifs-${d.year}.csv`, 'text/csv');
+    share(new Blob([csv], { type: 'text/csv' }), `comptes-locatifs-${d.year}.csv`, 'text/csv');
   },
 
   // documents
@@ -2540,7 +2641,7 @@ Object.assign(actions, {
   docShare: (d, el) => {
     const wrap = el.closest('.sheet-wrap');
     const meta = byId(state.documents, d.id);
-    if (wrap && wrap.blob && meta) shareFile(wrap.blob, meta.name, wrap.blob.type);
+    if (wrap && wrap.blob && meta) share(wrap.blob, meta.name, wrap.blob.type);
   },
   docDelete: (d) => {
     if (!confirm(t('confirmDelete'))) return;
@@ -2604,12 +2705,17 @@ Object.assign(forms, {
       if (reg.balance !== 0) {
         x.adjustments.push({ id: uid(), date: dueDate, label: `Régularisation des charges ${year}`, amount: reg.balance, kind: 'regularization', regYear: year });
       }
+      // Undoing it later also takes back the new monthly charges (and puts back
+      // a rent entry it replaced in the same month).
+      let rentChange = null;
       if (update && ses.newMonthly !== null && ses.newMonthly !== undefined) {
         const r = rentAt(x, newFrom);
+        const replaced = (x.rents || []).find((y) => y.from === newFrom) || null;
         x.rents = (x.rents || []).filter((y) => y.from !== newFrom);
-        x.rents.push({ from: newFrom, rent: r.rent, charges: ses.newMonthly, reason: 'regularization' });
+        x.rents.push({ from: newFrom, rent: r.rent, charges: ses.newMonthly, reason: 'regularization', regYear: year });
+        rentChange = { from: newFrom, replaced };
       }
-      x.regularizations = { ...(x.regularizations || {}), [year]: { date: today(), balance: reg.balance, actual: reg.actualTotal, provisions: reg.provisions, tenantShare: reg.tenantShare } };
+      x.regularizations = { ...(x.regularizations || {}), [year]: { date: today(), balance: reg.balance, actual: reg.actualTotal, provisions: reg.provisions, tenantShare: reg.tenantShare, rentChange } };
     });
     delete sessions.reg[form.dataset.key];
     toast(t('regApplied'));
@@ -2621,15 +2727,17 @@ Object.assign(forms, {
     const date = f.get('date') || today();
     const amount = parseMoney(f.get('amount')) || 0;
     if (!passes(checkNotFuture('depositReturned', date, today()))) return;
-    closeSheet();
     // The penalty depends on the day the money actually went back.
-    const final = departureStatement({ ...l, endDate: ses.keysDate }, led, { ...ses, returnedOn: date }, today());
-    const { adjustments, payment } = depositSettlement(final, ses.deductions, ses.keysDate, date);
+    const final = departureStatement({ ...l, endDate: ses.endDate || ses.keysDate }, led, { ...ses, returnedOn: date }, today());
+    // A different amount than the statement's: asks first, then the account keeps the difference.
+    if (!passes(checkDepositReturned(final, amount))) return;
+    closeSheet();
+    const { adjustments, payment } = depositSettlement(final, ses.deductions, ses.keysDate, date, amount);
     commit((s) => {
       const x = s.leases.find((y) => y.id === l.id);
       x.adjustments = [...(x.adjustments || []), ...adjustments.map((a) => ({ id: uid(), ...a }))];
       if (payment) s.payments.push({ id: uid(), leaseId: x.id, ...payment });
-      x.departure = { ...(x.departure || {}), ...ses, returnedOn: date, returnedAmount: amount, statement: { ...final, returnedOn: date } };
+      x.departure = { ...(x.departure || {}), ...departureRecord(ses), returnedOn: date, returnedAmount: amount, statement: { ...final, returnedOn: date } };
     });
     void st;
     toast(t('saved'));
@@ -2762,7 +2870,7 @@ Object.assign(actions, {
   snapRestore: (d) => { restoreSnapshot(d.id); },
   supportExport: () => {
     const data = { app: 'gestion-locative', exportedAt: new Date().toISOString(), appVersion: APP_VERSION, ...anonymize(state), files: {} };
-    shareFile(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }), `gestion-locative-support-anonyme-${today()}.json`, 'application/json');
+    share(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }), `gestion-locative-support-anonyme-${today()}.json`, 'application/json');
   },
   supportRefresh: async () => {
     const g = gh();

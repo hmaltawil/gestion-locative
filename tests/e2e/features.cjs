@@ -128,6 +128,9 @@ require('fs').mkdirSync(OUT, { recursive: true });
   step('departure');
   await nav('#/leases'); await page.click('text=Sophie Bernard');
   await page.click('a.action[href^="#/departure"]');
+  // Lease end (end of notice) and keys date are separate since 1.3.9.
+  await page.fill('[data-f=endDate]', '2026-11-04');
+  await page.dispatchEvent('[data-f=endDate]', 'change');
   await page.fill('[data-f=keysDate]', '2026-11-04');
   await page.dispatchEvent('[data-f=keysDate]', 'change');
   await page.click('[data-action=depDedAdd]');

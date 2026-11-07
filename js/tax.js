@@ -4,6 +4,7 @@
 
 import { ledger, rentAt, isActive } from './calc.js';
 import { occupancyDays } from './charges.js';
+import { _dicts } from './i18n.js';
 
 export const LINE_2044 = {
   management: '221', insurance: '223', works: '224', propertyTax: '227', condo: '229', loanInterest: '250', loanInsurance: '250',
@@ -56,10 +57,12 @@ export function taxSummary(state, year, today) {
     const leases = state.leases.filter((l) => l.propertyId === p.id);
     let rent = 0;
     let charges = 0;
+    let forfait = 0;
     for (const l of leases) {
       const r = rentReceived(l, state.payments, year, today);
       rent += r.rent;
       charges += r.charges;
+      if (l.chargesType === 'forfait') forfait += r.charges;
     }
     const rented = leases.some((l) => l.startDate <= `${year}-12-31` && occupancyDays(l, year) > 0);
     const lines = {};
@@ -68,7 +71,7 @@ export function taxSummary(state, year, today) {
       const line = LINE_2044[e.category];
       if (line) lines[line] = (lines[line] || 0) + e.amount;
     }
-    return { property: p, rent, charges, rented, lines };
+    return { property: p, rent, charges, forfait, rented, lines };
   });
   const general = {};
   for (const e of state.expenses) {
@@ -109,6 +112,9 @@ export function taxSummary(state, year, today) {
     rentedCount,
     notDeductible,
     chargesReceived: props.reduce((s, p) => s + p.charges, 0),
+    // Fixed charges (forfait) received: kept out of line 211 like other
+    // charges, but often treated as extra rent for tax. Shown so it can be checked.
+    forfaitCharges: props.reduce((s, p) => s + p.forfait, 0),
     microEligible: gross <= MICRO_FONCIER_LIMIT,
     microTaxable: Math.round(gross * 0.7),
     activeLeases: state.leases.filter((l) => isActive(l, `${year}-12-31`)).length,
@@ -116,9 +122,15 @@ export function taxSummary(state, year, today) {
 }
 
 function csvCell(v) {
-  const s = String(v ?? '');
-  return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  let s = String(v ?? '');
+  // Excel runs a cell starting with = + - or @ as a formula: such text gets a
+  // leading apostrophe. Amounts ("-12,50") stay numbers.
+  if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+(,\d+)?$/.test(s)) s = `'${s}`;
+  return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
+
+// The accountant's file is in French, like the PDFs.
+const FR = _dicts.fr;
 
 function euros(cents) {
   return (cents / 100).toFixed(2).replace('.', ',');
@@ -132,11 +144,13 @@ export function yearCsv(state, year) {
     if (!inYear(pay.date, year)) continue;
     const l = state.leases.find((x) => x.id === pay.leaseId);
     const who = l ? (l.tenants || []).map((t) => t.name).join(' & ') : '';
-    rows.push([pay.date, 'Encaissement', l ? propName(l.propertyId) : '', who, pay.method || '', '', euros(pay.amount)]);
+    // The deposit applied to the account at a departure is not new money: say so.
+    const type = pay.method === 'deposit' ? 'Dépôt de garantie imputé' : 'Encaissement';
+    rows.push([pay.date, type, l ? propName(l.propertyId) : '', who, FR[`method_${pay.method}`] || pay.method || '', '', euros(pay.amount)]);
   }
   for (const e of state.expenses) {
     if (!inYear(e.date, year)) continue;
-    rows.push([e.date, 'Dépense', e.propertyId ? propName(e.propertyId) : 'Général', e.description || '', e.category, LINE_2044[e.category] || '', euros(-e.amount)]);
+    rows.push([e.date, 'Dépense', e.propertyId ? propName(e.propertyId) : 'Général', e.description || '', FR[`cat_${e.category}`] || e.category, LINE_2044[e.category] || '', euros(-e.amount)]);
   }
   const [head, ...body] = rows;
   body.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));

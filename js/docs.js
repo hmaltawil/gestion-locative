@@ -98,15 +98,19 @@ function para(doc, y, text, size = 11) {
   return y + 4;
 }
 
+// Lowest point a table row may reach before it continues on a new page.
+const BOTTOM = 280;
+
 // rows: [label, amount, { bold }]
 function table(doc, y, rows) {
   doc.setFontSize(11);
   const x2 = 210 - M;
   doc.setDrawColor(200, 200, 200);
   for (const [label, value, opt = {}] of rows) {
-    if (opt.line) { doc.line(M, y - 4, x2, y - 4); }
     doc.setFont('helvetica', opt.bold ? 'bold' : 'normal');
     const lines = doc.splitTextToSize(label, W - 45);
+    if (y + 6.5 * (lines.length - 1) > BOTTOM) { doc.addPage(); y = M + 6; doc.setFontSize(11); }
+    if (opt.line) { doc.line(M, y - 4, x2, y - 4); }
     doc.text(lines, M + 2, y);
     if (value !== undefined && value !== null) doc.text(String(value), x2 - 2, y, { align: 'right' });
     y += 6.5 * lines.length;
@@ -115,17 +119,23 @@ function table(doc, y, rows) {
   return y + 4;
 }
 
-// columns table for unpaid months
+// columns table for unpaid months; a long list continues on the next page,
+// with the column titles repeated.
 function grid(doc, y, head, body) {
-  doc.setFontSize(10);
   const cols = [M + 2, 95, 130, 210 - M - 2];
-  doc.setFillColor(242, 242, 242);
-  doc.rect(M, y - 5, W, 8, 'F');
-  doc.setFont('helvetica', 'bold');
-  head.forEach((h, i) => doc.text(h, cols[i], y, i === 0 ? {} : { align: 'right' }));
-  doc.setFont('helvetica', 'normal');
-  y += 8;
+  const drawHead = () => {
+    doc.setFontSize(10);
+    doc.setFillColor(242, 242, 242);
+    doc.rect(M, y - 5, W, 8, 'F');
+    doc.setFont('helvetica', 'bold');
+    head.forEach((h, i) => doc.text(h, cols[i], y, i === 0 ? {} : { align: 'right' }));
+    doc.setFont('helvetica', 'normal');
+    y += 8;
+  };
+  if (y > BOTTOM - 8) { doc.addPage(); y = M + 6; }
+  drawHead();
   for (const row of body) {
+    if (y > BOTTOM) { doc.addPage(); y = M + 6; drawHead(); }
     if (row.bold) doc.setFont('helvetica', 'bold');
     row.cells.forEach((c, i) => doc.text(String(c), cols[i], y, i === 0 ? {} : { align: 'right' }));
     doc.setFont('helvetica', 'normal');
@@ -310,8 +320,9 @@ export function formalNoticePdf(state, lease, led) {
   y = para(doc, y, `Par la présente, je vous mets en demeure de me régler cette somme dans un délai de huit jours à compter de la réception de ce courrier.\n\nÀ défaut de paiement dans ce délai, je me verrai contraint(e) d'engager toute procédure utile au recouvrement de ma créance, notamment par l'intermédiaire d'un commissaire de justice, et de faire application, le cas échéant, de la clause résolutoire prévue au bail.\n\nJe vous prie d'agréer, Madame, Monsieur, l'expression de mes salutations distinguées.`);
   y = signature(doc, y + 6, ctx);
   if (lease.guarantor) {
+    if (y > BOTTOM) { doc.addPage(); y = M + 6; }
     doc.setFontSize(10);
-    doc.text(`Copie adressée à la caution : ${lease.guarantor}`, M, Math.min(y, 275));
+    doc.text(doc.splitTextToSize(`Copie adressée à la caution : ${lease.guarantor}`, W), M, y);
   }
   return { doc, name: fileName('Mise-en-demeure', todayStr().slice(0, 7), lease) };
 }
@@ -357,6 +368,8 @@ export function regularizationPdf(state, lease, reg, lines, opts = {}) {
   y = table(doc, y, rows);
   let text = '';
   if (reg.balance > 0) text += `Je vous remercie de bien vouloir régler ce solde de ${fmtMoney(reg.balance)} avec votre échéance${opts.dueDate ? ` du ${fmtDate(opts.dueDate)}` : ''}. `;
+  // Article 23: done after the end of the following year, the tenant may pay in twelve instalments.
+  if (reg.balance > 0 && opts.late) text += `Cette régularisation intervenant après le terme de l'année civile suivant celle des charges, vous pouvez, si vous le demandez, régler ce solde par douzièmes, soit ${fmtMoney(Math.ceil(reg.balance / 12))} par mois pendant douze mois (article 23 de la loi n° 89-462 du 6 juillet 1989). `;
   else if (reg.balance < 0) text += `Ce trop-perçu de ${fmtMoney(-reg.balance)} sera déduit de votre prochaine échéance. `;
   if (opts.newMonthly !== undefined && opts.newMonthly !== null && opts.newFrom) {
     text += `\n\nÀ compter de l'échéance de ${fmtPeriod(opts.newFrom)}, la provision mensuelle pour charges est ajustée à ${fmtMoney(opts.newMonthly)}.`;
@@ -511,6 +524,7 @@ export function taxSummaryPdf(state, s, labels) {
   y = table(doc, y, rows);
   let text = `Pour comparaison, micro-foncier : ${s.microEligible ? `revenu imposable de ${fmtMoney(s.microTaxable)} (abattement de 30 %).` : 'non applicable, les loyers bruts dépassant 15 000 €.'}`;
   if (s.notDeductible) text += `\nDépenses non déductibles enregistrées (charges récupérables, TEOM, autres) : ${fmtMoney(s.notDeductible)}.`;
+  if (s.forfaitCharges) text += `\nCharges forfaitaires reçues, non comptées ligne 211 : ${fmtMoney(s.forfaitCharges)}. Un forfait de charges est souvent traité comme un complément de loyer : à vérifier.`;
   y = para(doc, y, text, 10);
   footnote(doc, "Document indicatif établi à partir des données saisies. Les loyers sont comptés à leur date d'encaissement, hors charges. Vérifiez chaque ligne avec la notice 2044 de l'année (ligne 230 d'après le décompte du syndic, déficit foncier, régimes particuliers).");
   return { doc, name: `Revenus-fonciers-${s.year}.pdf` };
@@ -526,14 +540,19 @@ export async function deliver({ doc, name }) {
   return shareFile(blob, name, 'application/pdf');
 }
 
+// Returns 'shared', 'cancelled', 'downloaded' (no share menu on this device)
+// or 'fallback' (the share menu failed, so the file was offered as a download:
+// it may not have been saved).
 export async function shareFile(blob, name, type) {
   const file = new File([blob], name, { type });
+  let failed = false;
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title: name });
       return 'shared';
     } catch (e) {
       if (e && e.name === 'AbortError') return 'cancelled';
+      failed = true;
     }
   }
   const url = URL.createObjectURL(blob);
@@ -544,5 +563,5 @@ export async function shareFile(blob, name, type) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
-  return 'downloaded';
+  return failed ? 'fallback' : 'downloaded';
 }

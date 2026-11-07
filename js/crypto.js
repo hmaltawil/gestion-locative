@@ -2,7 +2,12 @@
 // AES-256-GCM with a key derived from the passphrase (PBKDF2-SHA-256).
 // Uses the browser's built-in Web Crypto (also available in Node for tests).
 
-const ITERATIONS = 310000;
+// Rounds of PBKDF2 for new backups (OWASP 2023: 600,000 for SHA-256). Older
+// backups (310,000) still open: the count is read from each file, within limits
+// so a tampered file can't make the phone work for minutes.
+const ITERATIONS = 600000;
+const MIN_ITERATIONS = 100000;
+const MAX_ITERATIONS = 2000000;
 const FORMAT = 'gestion-locative-encrypted';
 
 function subtle() {
@@ -66,8 +71,10 @@ export async function encryptBytes(bytes, passphrase, session) {
 export async function decryptBytes(envelopeText, passphrase) {
   let env;
   try { env = JSON.parse(envelopeText); } catch (e) { throw new Error('not-encrypted'); }
-  if (!env || env.format !== FORMAT) throw new Error('not-encrypted');
-  const key = await deriveKey(passphrase, b64ToBytes(env.kdf.salt), env.kdf.iterations);
+  if (!env || env.format !== FORMAT || !env.kdf) throw new Error('not-encrypted');
+  const n = env.kdf.iterations;
+  if (!Number.isInteger(n) || n < MIN_ITERATIONS || n > MAX_ITERATIONS) throw new Error('not-encrypted');
+  const key = await deriveKey(passphrase, b64ToBytes(env.kdf.salt), n);
   try {
     const out = await subtle().decrypt({ name: 'AES-GCM', iv: b64ToBytes(env.iv) }, key, b64ToBytes(env.data));
     return new Uint8Array(out);

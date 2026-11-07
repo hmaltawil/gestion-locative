@@ -4,7 +4,7 @@ One place to see what's done, what's waiting, and what comes next. Update it at 
 
 **Status:** ✅ done · 🔜 next · ⏳ waiting on someone · ⏸️ on hold · 💡 idea, not planned yet
 
-**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed today by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3), fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before), who paid on receipts, tenant or CAF (version 1.3.6), a warning for payments dated in the future (version 1.3.7) and a safety review (version 1.3.8: security, mistakes the app now questions, legal checks, backups). All of it is live and checked on the iPhone. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL) and in the [Ideas](#ideas-backlog). **Next:** milestone 7, fixes from real use, as they come up. The two imports (milestones 5 and 6) are [on hold](#on-hold) since 6 Nov 2026: the user prefers to enter leases and payments by hand.
+**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3), fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before), who paid on receipts, tenant or CAF (version 1.3.6), a warning for payments dated in the future (version 1.3.7) and a safety review (version 1.3.8: security, mistakes the app now questions, legal checks, backups). All of it is live and checked on the iPhone. A second code review (7 Nov 2026) brought version 1.3.9: long letters, the departure, erasing, share failures and legal points; it waits for the iPhone check. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL) and in the [Ideas](#ideas-backlog). **Next:** milestone 7, fixes from real use, as they come up. The two imports (milestones 5 and 6) are [on hold](#on-hold) since 6 Nov 2026: the user prefers to enter leases and payments by hand.
 
 ## How we work
 
@@ -168,6 +168,43 @@ Backups:
 - [x] New GitHub connections need a passphrase of at least 12 characters
 - [x] Attachments over 15 MB are refused, with a message
 
+### ✅ Version 1.3.9 · Fixes from the second code review (7 Nov 2026)
+Asked for on 7 Nov 2026 ("review this code… go all in", then "for 2 until 5 you can start fixing"). Waiting for the iPhone check (see [Waiting](#waiting-on-you)).
+
+Wrong documents or money:
+- [x] Reminder and formal notice: a long list of unpaid months continues on the next page (column titles repeated), with the total; it used to run off the page. Every table in the PDFs does the same
+- [x] Departure: "Lease end (end of notice)" and "Keys returned on" are separate. Rent is due until the lease end, even when the keys come back earlier (article 15); the deposit deadline runs from the keys
+- [x] Deposit returned: the amount actually sent back is what the account books; a different amount than the statement asks first and the difference stays on the account
+- [x] Rent revision: rounded down to the cent, never above the legal maximum (it rounded to the nearest cent)
+- [x] Amounts: "1.200" or "1,200" is 1 200 € (it was read as 12 €)
+- [x] A share menu that fails (other than Cancel) no longer counts as a backup made or a letter sent; the backup asks whether the file was saved
+
+Clearer and safer:
+- [x] "Erase all data" says it can be undone (copy kept 14 days); new "Remove everything from this device" really removes data, copies, documents and GitHub settings
+- [x] Deleting a lease or a property with payments from earlier years says which tax summaries lose them
+- [x] Values typed into the address bar (expenses filter, monthly send month) can no longer add content to the page
+
+Crashes and rare failures:
+- [x] A lease page with an IRL quarter but no year opens again
+- [x] A lease without a valid start date (from a damaged file) is repaired when the data is read, instead of crashing screens
+- [x] Restoring (file, automatic copy, GitHub) pauses the automatic GitHub backup until it's done
+- [x] The backup file is built one document at a time, so many photos weigh less on the iPhone's memory
+
+Legal and tax:
+- [x] Fixed charges (forfait) on an unfurnished lease: the app asks first, since the law allows them only in a flat-share (article 8-1); the tax summary shows fixed charges received apart, to check whether they count as rent
+- [x] Charges reconciliation done after the end of the following year: the letter and the screen say the tenant can pay in twelve monthly instalments (article 23)
+- [x] Undoing a charges reconciliation also takes back the new monthly charges it set
+- [x] Homes rated G (from 2025), F (from 2028) and E (from 2034): a note on the property and a question before a new lease, since they can no longer be let or renewed
+- [x] Revision date of 29 February, and lease terms after a leap year: the right day
+
+Smaller:
+- [x] Accountant CSV: no formulas in Excel, French labels, the deposit applied at a departure named as such
+- [x] Encryption of new GitHub backups: 600,000 rounds (older backups still open); a tampered file can't make the phone work for minutes
+- [x] Support copy: wording says it never saves to GitHub; a read-only token is enough
+- [x] A test checks that every app file is in the offline list (`sw.js`)
+
+Not done yet (the owner asked first how serious it is): the app's own web address, separate from `hmaltawil.github.io`, which another of the owner's sites shares; see [Ideas](#ideas-backlog).
+
 ---
 
 ## Waiting on you
@@ -209,6 +246,11 @@ Backups:
   - [x] A lease › Edit: the rent and charges show the amounts in force; change one, save, confirm, and the lease page shows the new amount
   - [x] A lease with nothing late › Reminder: a window explains what is due next and offers the rent call
   - [x] A lease › Edit › Start of tracking: enter an amount owed from before, save, and Reminder then works
+- ⏳ **Version 1.3.9 to check on the iPhone**
+  - [ ] Settings › About shows 1.3.9, and the app works as before (home, a lease, a receipt PDF, Settings)
+  - [ ] A lease › Departure: "Lease end" and "Keys returned on" both show; the statement counts rent up to the lease end
+  - [ ] Settings › Back up: the share menu opens and "Backup created" shows after saving to Files
+  - [ ] Settings › About: the two erase buttons and their explanations are clear (don't tap "Remove everything" on the real phone)
 - ⏳ **Legal check, done once:** have the guarantor agreement, formal notice and deposit return letter reviewed, for example by your local ADIL. Questions to ask:
   - Guarantor agreement: since 2022 (article 2297 of the Civil Code), is the handwritten statement now complete (amount in figures and words; for a joint guarantee, the acknowledgment that the landlord need not pursue the tenant first)?
   - Rent revision claimed late: which IRL value applies, the latest published on the anniversary date or the latest published on the day of the request? Today the app uses the latest available on the day you tap, so with an anniversary just before INSEE publishes, a few days' difference changes the index used. Once answered, the app can follow the rule.
@@ -280,6 +322,7 @@ Goal: a monthly routine of about 5 minutes. Download the bank file, import it, t
 - **Encrypted manual backup file** (from the safety review): the file saved in iCloud Drive holds all tenant data unencrypted; it could use the same passphrase as the GitHub backup
 - **App lock with Face ID or a PIN** (from the safety review): anyone holding the unlocked phone can open the app
 - **An automatic copy before deleting a payment or an expense** (from the safety review): today only the daily copy covers them
+- **The app's own web address** (from the code review of 7 Nov 2026): every site under `hmaltawil.github.io` shares the browser's storage, so another of the owner's sites there (Deutschlernen) could read this app's data in a browser where both are opened. On the user's iPhone the home-screen app has its own storage, which limits this. A custom domain or a GitHub account used only for this app fixes it; best done before the handover, since data has to be restored after a change of address
 - **The CAF's share on rent calls** (from milestone 6, on hold): when the CAF pays part of the rent directly, show what is expected from the CAF and what the tenant still pays
 
 ## Known limitations (current version)

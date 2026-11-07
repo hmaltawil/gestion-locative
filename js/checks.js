@@ -4,7 +4,7 @@
 // - warnings: the app asks first, one question per warning.
 // Messages are the i18n keys 'chk_<key>'. Params are raw values the screen
 // formats: `date` (YYYY-MM-DD), `month` (YYYY-MM), and cents for
-// amount, owed, rent, max, from, to.
+// amount, owed, rent, max, from, to, expected, diff.
 
 import { addDays, addYears, periodOf } from './util.js';
 import { currentRent, firstTrackedPeriod, ledger, sortedRents } from './calc.js';
@@ -33,9 +33,17 @@ export function checkPayment(lease, payments, { date, amount }, today) {
   return ok(w);
 }
 
+// Law "Climat et résilience" (metropolitan France): from these dates a home
+// with this energy rating is not "decent", so it can't be let under a new
+// lease or renewed.
+export const DPE_BAN = { G: '2025-01-01', F: '2028-01-01', E: '2034-01-01' };
+export function dpeBanned(dpe, date) {
+  return !!(DPE_BAN[dpe] && date >= DPE_BAN[dpe]);
+}
+
 // The lease form. `existing` is the lease before the edit (null for a new one),
 // so a value that was already there is not questioned again on every edit.
-export function checkLease(f, today, existing = null) {
+export function checkLease(f, today, existing = null, property = null) {
   if ([f.rent, f.charges, f.deposit].some((v) => typeof v === 'number' && v < 0)) return refuse('negativeAmount');
   const w = [];
   if (f.startDate && changed(existing, 'startDate', f.startDate)) {
@@ -48,6 +56,13 @@ export function checkLease(f, today, existing = null) {
   }
   // Unfurnished lease: the deposit is at most one month's rent excluding charges.
   if (f.rent > 0 && f.deposit > f.rent && changed(existing, 'deposit', f.deposit)) w.push({ key: 'depositAboveCap', params: { max: f.rent } });
+  // Unfurnished lease: fixed charges only in a flat-share (article 8-1).
+  if (f.chargesType === 'forfait' && changed(existing, 'chargesType', 'forfait')) w.push({ key: 'forfaitColocation' });
+  // A new lease (or a move to another property) on a home that can no longer be let.
+  const dpe = property && property.dpe;
+  if (f.startDate && dpeBanned(dpe, f.startDate) && (changed(existing, 'startDate', f.startDate) || changed(existing, 'propertyId', f.propertyId))) {
+    w.push({ key: 'dpeIndecent', params: { dpe, date: DPE_BAN[dpe] } });
+  }
   return ok(w);
 }
 
@@ -86,6 +101,15 @@ export function checkRevisionFrom(info, applyFrom) {
 // a deposit marked as returned.
 export function checkNotFuture(kind, date, today) {
   return ok(date && date > today ? [{ key: `${kind}Future`, params: { date } }] : []);
+}
+
+// The amount actually sent back when the deposit is returned, compared with the
+// statement (st from departureStatement in charges.js, penalty included).
+export function checkDepositReturned(st, amount) {
+  if (amount < 0) return refuse('negativeAmount');
+  if (amount === st.toReturn) return ok();
+  const key = amount < st.toReturn ? 'depositReturnedLess' : 'depositReturnedMore';
+  return ok([{ key, params: { amount, expected: st.toReturn, diff: Math.abs(amount - st.toReturn) } }]);
 }
 
 export function checkGuarantor({ maxAmount }) {
