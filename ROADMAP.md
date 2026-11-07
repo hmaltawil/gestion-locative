@@ -4,7 +4,7 @@ One place to see what's done, what's waiting, and what comes next. Update it at 
 
 **Status:** ✅ done · 🔜 next · ⏳ waiting on someone · ⏸️ on hold · 💡 idea, not planned yet
 
-**Where we are (6 Nov 2026):** milestones 1 to 4 are done, followed by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3), fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before), who paid on receipts, tenant or CAF (version 1.3.6), a warning for payments dated in the future (version 1.3.7) and a safety review (version 1.3.8: security, mistakes the app now questions, legal checks, backups). All of it is live and checked on the iPhone. A second code review (7 Nov 2026) brought version 1.3.9: long letters, the departure, erasing, share failures and legal points; it waits for the iPhone check. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL) and in the [Ideas](#ideas-backlog). **Next:** milestone 7, fixes from real use, as they come up. The two imports (milestones 5 and 6) are [on hold](#on-hold) since 6 Nov 2026: the user prefers to enter leases and payments by hand.
+**Where we are (7 Nov 2026):** milestones 1 to 4 are done, followed by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3), fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before), who paid on receipts, tenant or CAF (version 1.3.6), a warning for payments dated in the future (version 1.3.7) and a safety review (version 1.3.8: security, mistakes the app now questions, legal checks, backups). All of it is live and checked on the iPhone. A second code review (7 Nov 2026) brought version 1.3.9: long letters, the departure, erasing, share failures and legal points; it is live and checked on the iPhone. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL) and in the [Ideas](#ideas-backlog). **Next:** milestone 7, fixes from real use, as they come up. The two imports (milestones 5 and 6) are [on hold](#on-hold) since 6 Nov 2026: the user prefers to enter leases and payments by hand.
 
 ## How we work
 
@@ -169,7 +169,7 @@ Backups:
 - [x] Attachments over 15 MB are refused, with a message
 
 ### ✅ Version 1.3.9 · Fixes from the second code review (7 Nov 2026)
-Asked for on 7 Nov 2026 ("review this code… go all in", then "for 2 until 5 you can start fixing"). Waiting for the iPhone check (see [Waiting](#waiting-on-you)).
+Code: [`6bc4dfa`](https://github.com/hmaltawil/gestion-locative/commit/6bc4dfa). Asked for on 7 Nov 2026 ("review this code… go all in", then "for 2 until 5 you can start fixing"). Checked on the iPhone (7 Nov 2026).
 
 Wrong documents or money:
 - [x] Reminder and formal notice: a long list of unpaid months continues on the next page (column titles repeated), with the total; it used to run off the page. Every table in the PDFs does the same
@@ -246,11 +246,12 @@ Not done yet (the owner asked first how serious it is): the app's own web addres
   - [x] A lease › Edit: the rent and charges show the amounts in force; change one, save, confirm, and the lease page shows the new amount
   - [x] A lease with nothing late › Reminder: a window explains what is due next and offers the rent call
   - [x] A lease › Edit › Start of tracking: enter an amount owed from before, save, and Reminder then works
-- ⏳ **Version 1.3.9 to check on the iPhone**
-  - [ ] Settings › About shows 1.3.9, and the app works as before (home, a lease, a receipt PDF, Settings)
-  - [ ] A lease › Departure: "Lease end" and "Keys returned on" both show; the statement counts rent up to the lease end
-  - [ ] Settings › Back up: the share menu opens and "Backup created" shows after saving to Files
-  - [ ] Settings › About: the two erase buttons and their explanations are clear (don't tap "Remove everything" on the real phone)
+- ✅ **Version 1.3.9 checked on the iPhone** (7 Nov 2026)
+  - [x] Settings › About shows 1.3.9, and the app works as before (home, a lease, a receipt PDF, Settings)
+  - [x] A lease › Departure: "Lease end" and "Keys returned on" both show; the statement counts rent up to the lease end
+  - [x] Settings › Back up: the share menu opens and "Backup created" shows after saving to Files
+  - [x] Settings › About: the two erase buttons and their explanations are clear
+- ⏳ **GitHub backup for the user's iPhone** (7 Nov 2026): a new private repository with its own token and passphrase, since the user starts from scratch and `locatif-sauvegarde` only holds test data. The owner's phone disconnects, then reconnects later as a support copy
 - ⏳ **Legal check, done once:** have the guarantor agreement, formal notice and deposit return letter reviewed, for example by your local ADIL. Questions to ask:
   - Guarantor agreement: since 2022 (article 2297 of the Civil Code), is the handwritten statement now complete (amount in figures and words; for a joint guarantee, the acknowledgment that the landlord need not pursue the tenant first)?
   - Rent revision claimed late: which IRL value applies, the latest published on the anniversary date or the latest published on the day of the request? Today the app uses the latest available on the day you tap, so with an anniversary just before INSEE publishes, a few days' difference changes the index used. Once answered, the app can follow the rule.
