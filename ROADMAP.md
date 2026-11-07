@@ -20,9 +20,6 @@ One place to see what's open, what's next and what's done. Update it at the end 
 - ⏳ **Before cancelling Gestion Locative Facile:** export its data and keep the files privately (not in this repository), as a record of past rents and receipts. On a computer: log in at immobilierloyer.com, tick Outils › Préférences › Réglages › Réglages avancés › "Export des données", then use **Exporter** on each page.
 - ⏳ **Optional, fewer permission prompts for Claude:** add `.claude/settings.json` to this repository yourself (Claude isn't allowed to change its own permissions).
 
-**Decision to take**
-- ⏳ **The app's own web address.** Every site under `hmaltawil.github.io` shares the browser's storage, so another of your sites there (Deutschlernen) could read this app's data in a browser where both are opened. On the user's iPhone the home-screen app has its own storage, which limits this; the main exposure is a support copy opened in a browser that also opens Deutschlernen. Fix: a custom domain, or a GitHub account used only for this app. Cost: the user restores their data from the GitHub backup once, after the move.
-
 ---
 
 ## Next
@@ -88,6 +85,7 @@ Not needed: the user enters their own data from scratch. The plan is in the hist
 - Diagnostic validity rules are simplified (older DPEs have special rules); expiry dates can be edited
 - Exporting to the Calendar again creates duplicate events unless the old ones are deleted first
 - The bank import is generic (tuning it is on hold with milestone 6)
+- The app shares its web address (`hmaltawil.github.io`) with the owner's Deutschlernen site, and so the browser's storage where both are opened. Decided on 7 Nov 2026 not to move it: the user's iPhone never opens Deutschlernen and the home-screen app has its own storage; the owner opens the support copy only from its home-screen icon
 - A lease entered by hand while already running is tracked from the month it's entered, with today's rent, unless Start of tracking is set earlier (see Open items)
 
 ---
