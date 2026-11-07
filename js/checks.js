@@ -7,7 +7,7 @@
 // amount, owed, rent, max, from, to, expected, diff.
 
 import { addDays, addYears, periodOf } from './util.js';
-import { currentRent, firstTrackedPeriod, ledger, sortedRents } from './calc.js';
+import { currentRent, firstTrackedPeriod, frequencyOf, ledger, sortedRents } from './calc.js';
 
 const ok = (warnings = []) => ({ error: null, warnings });
 const refuse = (key, params = {}) => ({ error: { key, params }, warnings: [] });
@@ -24,9 +24,10 @@ export function checkPayment(lease, payments, { date, amount }, today) {
   // Before tracking started, it is usually already in "owed at that date".
   const first = firstTrackedPeriod(lease);
   if (first && date < `${first}-01`) w.push({ key: 'paymentBeforeTracking', params: { date, month: first } });
-  // Far more than owed plus two months: probably a typing mistake (65000 for 650).
+  // Far more than owed plus two payments (months, or periods of 3 or 6 months):
+  // probably a typing mistake (65000 for 650).
   const cur = currentRent(lease, today);
-  const rent = cur.rent + cur.charges;
+  const rent = (cur.rent + cur.charges) * frequencyOf(lease);
   const led = ledger(lease, payments, today);
   const owed = Math.max(0, led.owed - led.credit);
   if (rent > 0 && amount > owed + 2 * rent) w.push({ key: 'paymentTooMuch', params: { amount, owed, rent } });

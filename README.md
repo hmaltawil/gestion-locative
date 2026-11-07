@@ -10,7 +10,7 @@ What's done and what's planned: see [ROADMAP.md](ROADMAP.md). Notes for develope
 - **Appearance:** light by default; dark or automatic (follows the iPhone) in Settings.
 - **Signature:** drawn once with a finger (Settings › Signature › Add a signature, in its own window so scrolling never leaves marks) and added to receipts, rent calls and letters.
 - **Properties and leases:** tenants and co-tenants, guarantor, deposit, payment day, energy rating (DPE), tenant insurance date.
-- **Rent tracking:** a month-by-month view with paid, partial, unpaid and late statuses. Payments always clear the oldest debt first. First and last months are pro-rated. Already-running leases can start with an opening balance. One-off charges or credits can be added to a lease.
+- **Rent tracking:** a month-by-month view with paid, partial, unpaid and late statuses. Payments always clear the oldest debt first. First and last months are pro-rated. Already-running leases can start with an opening balance. One-off charges or credits can be added to a lease. Rent can be paid every month, every 3 months or every 6 months, at the start or at the end of each period (set in the lease): months are only late after the agreed date, and receipts and rent calls cover the whole period.
 - **Monthly send:** all receipts or rent calls for a month. Each tenant's PDF goes out in one tap (their email is copied first), or everything can be saved as one PDF for printing.
 - **Bank statement import:** reads the CSV export from any bank (columns are detected and can be corrected), matches incoming transfers to leases by tenant name, amount and labels seen before, skips anything already imported, and flags payments you already typed in by hand.
 

@@ -3,7 +3,7 @@
 
 import { amountInFrench, fmtDate, fmtMoney, fmtPeriod, pdfText, slug, todayStr } from './util.js';
 import { fmtIrlKey } from './irl.js';
-import { receivedFor } from './calc.js';
+import { frequencyOf, receivedFor } from './calc.js';
 
 const M = 20; // page margin (mm)
 const W = 210 - 2 * M; // usable width
@@ -171,6 +171,15 @@ function chargesLabel(lease) {
   return lease.chargesType === 'forfait' ? 'Charges (forfait)' : 'Provision pour charges';
 }
 
+// Paid every 3 or 6 months: "trimestriel" or "semestriel" (empty when monthly).
+function freqWord(lease) {
+  return { 3: 'trimestriel', 6: 'semestriel' }[frequencyOf(lease)] || '';
+}
+
+// "Loyer hors charges (3 mois)" when one document covers several months.
+const withMonths = (label, n) => (n > 1 ? `${label} (${n} mois)` : label);
+const periodTag = (x) => (x.months > 1 ? `${x.period}_${x.periodEnd}` : x.period);
+
 function fileName(kind, period, lease) {
   const who = slug((lease.tenants && lease.tenants[0] && lease.tenants[0].name) || 'locataire');
   return `${kind}_${period}_${who}.pdf`;
@@ -193,11 +202,12 @@ export function rentCallPdf(state, lease, call, into) {
   const ctx = ctxFor(state, lease);
   const doc = into || newDoc();
   let y = header(doc, ctx);
-  y = title(doc, y, "AVIS D'ÉCHÉANCE", `Loyer de ${fmtPeriod(due.period)}`);
+  const n = due.months || 1;
+  y = title(doc, y, "AVIS D'ÉCHÉANCE", n > 1 ? `Loyer ${freqWord(lease)} : ${fmtPeriod(due.period)} à ${fmtPeriod(due.periodEnd)}` : `Loyer de ${fmtPeriod(due.period)}`);
   y = para(doc, y, `Madame, Monsieur,\n\nVeuillez trouver ci-dessous le détail du loyer et des charges dus pour la période ${periodLabel(due)}, concernant le logement situé ${propertyAddress(ctx.property)}.`);
   const rows = [
-    ['Loyer hors charges', fmtMoney(due.rent)],
-    [chargesLabel(lease), fmtMoney(due.charges)],
+    [withMonths('Loyer hors charges', n), fmtMoney(due.rent)],
+    [withMonths(chargesLabel(lease), n), fmtMoney(due.charges)],
     [`Total de l'échéance`, fmtMoney(due.total), { bold: true, line: true }],
   ];
   const more = [];
@@ -211,7 +221,7 @@ export function rentCallPdf(state, lease, call, into) {
   y = para(doc, y, `Merci d'effectuer votre règlement au plus tard le ${fmtDate(due.dueDate)}.`);
   signature(doc, y + 6, ctx);
   footnote(doc, 'Cet avis d\'échéance ne vaut pas quittance. Il est établi sous réserve du bon encaissement du règlement.');
-  return { doc, name: fileName('Avis-echeance', due.period, lease) };
+  return { doc, name: fileName('Avis-echeance', periodTag(due), lease) };
 }
 
 // ---------- Quittance / reçu partiel ----------
@@ -249,25 +259,27 @@ export function receiptPdf(state, lease, row, into) {
   const full = row.paid >= row.total;
   const L = ctx.landlord;
   const lines = receivedFor(row);
+  const n = row.months || 1;
+  const word = n > 1 ? freqWord(lease) : '';
   let y = header(doc, ctx);
   if (full) {
     y = title(doc, y, 'QUITTANCE DE LOYER', `Période ${periodLabel(row)}`);
-    y = para(doc, y, `Je soussigné(e) ${L.name || '[nom du bailleur]'}, bailleur du logement situé ${propertyAddress(ctx.property)}, déclare avoir reçu ${receivedFrom(lines, lease)} la somme de ${fmtMoney(row.total)} au titre du paiement du loyer et des charges pour la période ${periodLabel(row)}, et en donne quittance, sous réserve de tous mes droits.`);
+    y = para(doc, y, `Je soussigné(e) ${L.name || '[nom du bailleur]'}, bailleur du logement situé ${propertyAddress(ctx.property)}, déclare avoir reçu ${receivedFrom(lines, lease)} la somme de ${fmtMoney(row.total)} au titre du paiement${word ? ` ${word}` : ''} du loyer et des charges pour la période ${periodLabel(row)}, et en donne quittance, sous réserve de tous mes droits.`);
     y = table(doc, y + 2, [
-      ['Loyer hors charges', fmtMoney(row.rent)],
-      [chargesLabel(lease), fmtMoney(row.charges)],
+      [withMonths('Loyer hors charges', n), fmtMoney(row.rent)],
+      [withMonths(chargesLabel(lease), n), fmtMoney(row.charges)],
       ['Total reçu', fmtMoney(row.total), { bold: true, line: true }],
     ]);
     if (lines.length) y = table(doc, y + 2, paymentRows(lines, lease));
     signature(doc, y + 6, ctx);
     footnote(doc, 'Quittance délivrée gratuitement (article 21 de la loi n° 89-462 du 6 juillet 1989). Elle annule tout reçu établi précédemment pour un paiement partiel de cette période.');
-    return { doc, name: fileName('Quittance', row.period, lease) };
+    return { doc, name: fileName('Quittance', periodTag(row), lease) };
   }
   y = title(doc, y, 'REÇU DE PAIEMENT PARTIEL', `Période ${periodLabel(row)}`);
-  y = para(doc, y, `Je soussigné(e) ${L.name || '[nom du bailleur]'}, bailleur du logement situé ${propertyAddress(ctx.property)}, déclare avoir reçu ${receivedFrom(lines, lease)} la somme de ${fmtMoney(row.paid)} en paiement partiel du loyer et des charges de la période ${periodLabel(row)}.`);
+  y = para(doc, y, `Je soussigné(e) ${L.name || '[nom du bailleur]'}, bailleur du logement situé ${propertyAddress(ctx.property)}, déclare avoir reçu ${receivedFrom(lines, lease)} la somme de ${fmtMoney(row.paid)} en paiement partiel du loyer${word ? ` ${word}` : ''} et des charges de la période ${periodLabel(row)}.`);
   y = table(doc, y + 2, [
-    ['Loyer hors charges', fmtMoney(row.rent)],
-    [chargesLabel(lease), fmtMoney(row.charges)],
+    [withMonths('Loyer hors charges', n), fmtMoney(row.rent)],
+    [withMonths(chargesLabel(lease), n), fmtMoney(row.charges)],
     ['Total dû pour la période', fmtMoney(row.total), { bold: true, line: true }],
     ['Montant reçu', fmtMoney(row.paid)],
     ['Reste dû', fmtMoney(row.total - row.paid), { bold: true }],
@@ -275,7 +287,7 @@ export function receiptPdf(state, lease, row, into) {
   if (lines.length) y = table(doc, y + 2, paymentRows(lines, lease));
   signature(doc, y + 6, ctx);
   footnote(doc, 'Ce reçu ne vaut pas quittance (article 21 de la loi n° 89-462 du 6 juillet 1989). Une quittance sera délivrée après paiement intégral.');
-  return { doc, name: fileName('Recu-partiel', row.period, lease) };
+  return { doc, name: fileName('Recu-partiel', periodTag(row), lease) };
 }
 
 function arrearsRows(led) {

@@ -3,8 +3,8 @@ import {
   periodOf, todayStr, uid, addDays,
 } from './util.js';
 import {
-  correctRent, currentRent, dueDateFor, firstTrackedPeriod, indexationStatus, isActive, ledger, monthOverview, nextPayment, rentAt,
-  rentCallBalance, rentEntryToCorrect, sortedRents,
+  billingPeriod, correctRent, currentRent, dueDateFor, firstTrackedPeriod, frequencyOf, indexationStatus, isActive, ledger, monthOverview,
+  nextPayment, periodReceipt, rentAt, rentCallBalance, rentEntryToCorrect, sortedRents, timingOf,
 } from './calc.js';
 import { fetchInseeIrl, fmtIrlKey, irlKey, irlTable, latestIrlKey } from './irl.js';
 import {
@@ -31,7 +31,7 @@ import {
 } from './checks.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.3.10';
+export const APP_VERSION = '1.3.11';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -65,6 +65,22 @@ function propName(p) {
 function tenantsLabel(lease) {
   const n = (lease.tenants || []).map((x) => x.name).filter(Boolean);
   return n.length ? n.join(' & ') : t('noTenantName');
+}
+
+// "Janvier 2026", "Janvier – mars 2026" or "Novembre 2025 – janvier 2026".
+function periodsLabel(start, end, lang = state.settings.lang) {
+  if (!end || end === start) return fmtPeriodCap(start, lang);
+  const from = start.slice(0, 4) === end.slice(0, 4) ? fmtPeriodCap(start, lang).replace(/ \d{4}$/, '') : fmtPeriodCap(start, lang);
+  return `${from} – ${fmtPeriod(end, lang)}`;
+}
+
+// "Quarterly · at the start of the period · now: January – March 2026".
+function paymentTermsText(l) {
+  const f = frequencyOf(l);
+  const base = `${t('freq_' + f)} · ${t('timing_' + timingOf(l))}`;
+  if (f === 1) return base;
+  const g = billingPeriod(l, periodOf(today()));
+  return `${base} · ${t('currentPeriod', { label: periodsLabel(g.start, g.end) })}`;
 }
 
 function leasesFor(propertyId) {
@@ -457,11 +473,20 @@ function viewLease(r) {
     }
   }
 
+  // A receipt button on the first month of each period (every month for a
+  // monthly lease), when something was paid towards that period.
+  const receiptAt = new Map(); // period start -> first row with a receipt
+  for (const row of led.rows) {
+    const key = billingPeriod(l, row.period).start;
+    if (!receiptAt.has(key)) receiptAt.set(key, { first: row.period, paid: false });
+    if (row.paid > 0) receiptAt.get(key).paid = true;
+  }
+  const hasReceipt = (row) => { const x = receiptAt.get(billingPeriod(l, row.period).start); return x && x.paid && x.first === row.period; };
   const ledgerList = shown.map((row) => `<li class="row">
       <div class="row-main"><strong>${esc(fmtPeriodCap(row.period, lang))}</strong>
         <span class="muted">${fmtMoney(row.total)}${row.prorata ? ' · ' + esc(t('prorata')) : ''}${row.paid > 0 && row.paid < row.total ? ' · ' + esc(t('paidAmount', { amount: fmtMoney(row.paid) })) : ''}</span></div>
       <div class="row-side">${pill(row.late ? (row.paid > 0 ? 'partial' : 'late') : row.status, row.late && row.paid === 0 ? t('status_late') : undefined)}</div>
-      ${row.paid > 0 ? `<button class="icon-btn" data-action="receipt" data-lease="${l.id}" data-period="${row.period}" aria-label="${esc(t('receipt'))}">${icon('doc')}</button>` : '<span class="icon-btn-space"></span>'}
+      ${hasReceipt(row) ? `<button class="icon-btn" data-action="receipt" data-lease="${l.id}" data-period="${row.period}" aria-label="${esc(t('receipt'))}">${icon('doc')}</button>` : '<span class="icon-btn-space"></span>'}
     </li>`).join('');
 
   const payments = [...led.payments].reverse();
@@ -505,6 +530,7 @@ function viewLease(r) {
           <dt>${esc(t('startDate'))}</dt><dd>${fmtDate(l.startDate)}</dd>
           ${l.endDate ? `<dt>${esc(t('endDate'))}</dt><dd>${fmtDate(l.endDate)}</dd>` : ''}
           <dt>${esc(t('paymentDay'))}</dt><dd>${esc(t('dayOfMonth', { day: l.paymentDay || 1 }))}</dd>
+          <dt>${esc(t('paymentTerms'))}</dt><dd>${esc(paymentTermsText(l))}</dd>
           <dt>${esc(t('chargesType'))}</dt><dd>${esc(t(l.chargesType === 'forfait' ? 'chargesForfait' : 'chargesProvision'))}</dd>
           ${l.deposit ? `<dt>${esc(t('deposit'))}</dt><dd>${fmtMoney(l.deposit)}</dd>` : ''}
           ${l.guarantor ? `<dt>${esc(t('guarantor'))}</dt><dd>${esc(l.guarantor)}</dd>` : ''}
@@ -581,6 +607,14 @@ function viewLeaseForm(r) {
           ${moneyField(t('deposit'), 'deposit', l.deposit)}
         </div>
         <p class="hint">${esc(t('depositHint'))}</p>
+        <div class="grid2">
+          ${field(t('payFrequency'), select('frequency', [['1', t('freq_1')], ['3', t('freq_3')], ['6', t('freq_6')]], String(frequencyOf(l)), 'data-change="leaseFreq"'))}
+          ${field(t('payTiming'), select('payTiming', [['advance', t('timing_advance')], ['arrears', t('timing_arrears')]], timingOf(l)))}
+        </div>
+        <div data-freq-only ${frequencyOf(l) > 1 ? '' : 'hidden'}>
+          ${field(t('periodAnchor'), input('periodAnchor', l.periodAnchor || (l.startDate ? periodOf(l.startDate) : ''), 'type="month"'), t('periodAnchorHint'))}
+        </div>
+        <p class="hint">${esc(t('freqHint'))}</p>
       </section>
       <section class="card">
         <h3>${esc(t('revisionSection'))}</h3>
@@ -865,9 +899,13 @@ function insuranceSheet(leaseId) {
 }
 
 // ---------- monthly batch ----------
+// A lease paid every 3 or 6 months appears in the monthly send only in the
+// first month of each period, with one document for the whole period.
+const sendsIn = (l, period) => frequencyOf(l) === 1 || billingPeriod(l, period).start === period;
+
 function batchDoc(type, l, period, into) {
   if (type === 'rentCall') return rentCallPdf(state, l, rentCallBalance(l, state.payments, period, today()), into);
-  const row = ledger(l, state.payments, today()).rows.find((x) => x.period === period);
+  const row = periodReceipt(l, state.payments, period, today());
   return row && row.paid > 0 ? receiptPdf(state, l, row, into) : null;
 }
 
@@ -894,16 +932,18 @@ function viewBatch(r) {
     const sent = state.sent[key];
     let status = '';
     let btn = '';
-    if (type === 'receipt') {
-      const row = ledger(l, state.payments, td).rows.find((x) => x.period === period);
+    const g = billingPeriod(l, period);
+    if (!sendsIn(l, period)) status = pill('upcoming', t('inPeriod', { label: periodsLabel(g.start, g.end, lang) }));
+    else if (type === 'receipt') {
+      const row = periodReceipt(l, state.payments, period, td);
       if (!row) status = pill('upcoming', t('notTracked'));
       else if (row.paid >= row.total && row.total > 0) { status = pill('paid'); btn = 'send'; ready++; }
       else if (row.paid > 0) { status = pill('partial'); btn = 'partial'; }
-      else status = pill(row.late ? 'late' : 'unpaid', row.late ? t('status_late') : undefined);
+      else { const late = td > row.dueDate; status = pill(late ? 'late' : 'unpaid', late ? t('status_late') : undefined); }
     } else { btn = 'send'; ready++; }
     const email = (l.tenants || []).map((x) => x.email).filter(Boolean)[0];
     return `<li class="row">
-      <div class="row-main"><strong>${esc(tenantsLabel(l))}</strong><span class="muted">${esc(propName(prop(l.propertyId)))}${email ? '' : ' · ' + esc(t('noEmailShort'))}</span>
+      <div class="row-main"><strong>${esc(tenantsLabel(l))}</strong><span class="muted">${esc(propName(prop(l.propertyId)))}${frequencyOf(l) > 1 && sendsIn(l, period) ? ' · ' + esc(periodsLabel(g.start, g.end, lang)) : ''}${email ? '' : ' · ' + esc(t('noEmailShort'))}</span>
       ${sent ? `<span class="ok-text small">${icon('check', 'tiny')} ${esc(t('sentOn', { date: fmtDate(sent) }))}</span>` : ''}</div>
       <div class="row-side">${status}</div>
       ${btn ? `<button class="btn small${sent ? ' secondary' : ''}" data-action="batchSend" data-type="${type}" data-lease="${l.id}" data-period="${esc(period)}">${esc(btn === 'partial' ? t('partialShort') : t('send'))}</button>` : '<span class="icon-btn-space"></span>'}
@@ -940,7 +980,7 @@ function importCandidates() {
     .filter((l) => isActive(l, addDays(td, -120)))
     .map((l) => {
       const cur = currentRent(l, td);
-      return { lease: l, monthTotal: cur.rent + cur.charges, owed: ledger(l, state.payments, td).owed };
+      return { lease: l, monthTotal: (cur.rent + cur.charges) * frequencyOf(l), owed: ledger(l, state.payments, td).owed };
     });
 }
 
@@ -1030,7 +1070,7 @@ function viewImport() {
 // ---------- charges reconciliation ----------
 function firstDueAfter(l, date) {
   let p = periodOf(date);
-  if (dueDateFor(l, p) < date) p = addMonths(p, 1);
+  for (let i = 0; i < 13 && dueDateFor(l, p) < date; i++) p = addMonths(p, 1);
   return dueDateFor(l, p);
 }
 
@@ -1863,11 +1903,24 @@ function rentCallSheet(leaseId) {
   const l = leaseOf(leaseId);
   const td = today();
   const cur = periodOf(td);
-  const options = [addMonths(cur, -1), cur, addMonths(cur, 1), addMonths(cur, 2)]
-    .filter((p) => p >= periodOf(l.startDate) && (!l.endDate || p <= periodOf(l.endDate)));
-  const def = Number(td.slice(8)) >= 15 && options.includes(addMonths(cur, 1)) ? addMonths(cur, 1) : (options.includes(cur) ? cur : options[0]);
+  const inLease = (p) => p >= periodOf(l.startDate) && (!l.endDate || p <= periodOf(l.endDate));
+  let options;
+  let def;
+  if (frequencyOf(l) === 1) {
+    options = [addMonths(cur, -1), cur, addMonths(cur, 1), addMonths(cur, 2)].filter(inLease);
+    def = Number(td.slice(8)) >= 15 && options.includes(addMonths(cur, 1)) ? addMonths(cur, 1) : (options.includes(cur) ? cur : options[0]);
+  } else {
+    // Paid every 3 or 6 months: one rent call per period (the previous one, this one and the next two).
+    const g = billingPeriod(l, cur);
+    const next = billingPeriod(l, addMonths(g.end, 1));
+    const after = billingPeriod(l, addMonths(next.end, 1));
+    options = [...new Set([billingPeriod(l, addMonths(g.start, -1)).start, g.start, next.start, after.start])].filter(inLease);
+    // In advance, near the end of a period, the call is usually for the next one.
+    const soon = timingOf(l) === 'advance' && cur === g.end && Number(td.slice(8)) >= 15;
+    def = soon && options.includes(next.start) ? next.start : (options.includes(g.start) ? g.start : options[0]);
+  }
   openSheet(t('rentCall'), options.length ? `<form class="form" data-form="rentCall" data-lease="${l.id}">
-      ${field(t('period'), select('period', options.map((p) => [p, fmtPeriodCap(p, state.settings.lang)]), def))}
+      ${field(t('period'), select('period', options.map((p) => [p, periodsLabel(p, billingPeriod(l, p).end)]), def))}
       <label class="check"><input type="checkbox" name="withBalance" checked> ${esc(t('includeArrears'))}</label>
       <button class="btn block" type="submit">${icon('doc')} ${esc(t('createPdf'))}</button>
     </form>` : empty(t('noPeriodsYet')));
@@ -1875,10 +1928,13 @@ function rentCallSheet(leaseId) {
 
 function receiptSheet(leaseId) {
   const l = leaseOf(leaseId);
-  const led = ledger(l, state.payments, today());
-  const rows = [...led.rows].reverse().filter((r) => r.paid > 0).slice(0, 24);
+  const td = today();
+  const led = ledger(l, state.payments, td);
+  // One line per period: a month, or the 3 or 6 months paid together.
+  const starts = [...new Set(led.rows.map((r) => billingPeriod(l, r.period).start))].reverse();
+  const rows = starts.map((p) => periodReceipt(l, state.payments, p, td)).filter((r) => r && r.paid > 0).slice(0, 24);
   openSheet(t('receipt'), rows.length ? `<p class="hint">${esc(t('receiptHint'))}</p><ul class="list">${rows.map((r) => `<li class="row">
-      <div class="row-main"><strong>${esc(fmtPeriodCap(r.period, state.settings.lang))}</strong><span class="muted">${r.paid >= r.total ? esc(t('fullReceipt')) : esc(t('partialReceipt', { amount: fmtMoney(r.paid) }))}</span></div>
+      <div class="row-main"><strong>${esc(periodsLabel(r.period, r.periodEnd))}</strong><span class="muted">${r.paid >= r.total ? esc(t('fullReceipt')) : esc(t('partialReceipt', { amount: fmtMoney(r.paid) }))}</span></div>
       <button class="btn small" data-action="receipt" data-lease="${l.id}" data-period="${r.period}">${icon('doc')} PDF</button></li>`).join('')}</ul>` : empty(t('noPaidPeriods')));
 }
 
@@ -1928,7 +1984,7 @@ function nothingLateSheet(l) {
   let text;
   if (!next) text = t('nothingLateAllPaid', { name: tenantsLabel(l) });
   else {
-    const what = next.kind === 'period' ? fmtPeriodCap(next.period, lang) : next.kind === 'opening' ? t('openingWhat') : (next.label || t('adj_other'));
+    const what = next.kind === 'period' ? periodsLabel(next.period, next.periodEnd, lang) : next.kind === 'opening' ? t('openingWhat') : (next.label || t('adj_other'));
     text = t('nothingLateNext', { name: tenantsLabel(l), what, amount: fmtMoney(next.amount), due: fmtDate(next.dueDate), from: fmtDate(addDays(next.dueDate, 1)) });
   }
   const tracked = firstTrackedPeriod(l);
@@ -2032,11 +2088,11 @@ const actions = {
   indexation: (d) => indexationSheet(d.lease),
   endLease: (d) => endLeaseSheet(d.lease),
   fillAmount: (d, el) => { const f = el.closest('form'); f.elements.amount.value = d.value; },
+  // The receipt for the whole period holding that month (the month itself for a monthly lease).
   receipt: (d) => {
     const l = leaseOf(d.lease);
-    const led = ledger(l, state.payments, today());
-    const row = led.rows.find((x) => x.period === d.period);
-    if (row) makePdf(() => receiptPdf(state, l, row));
+    const row = periodReceipt(l, state.payments, d.period, today());
+    if (row && row.paid > 0) makePdf(() => receiptPdf(state, l, row));
   },
   reminder: async (d) => {
     const l = leaseOf(d.lease);
@@ -2294,6 +2350,9 @@ const forms = {
       endDate,
       chargesType: f.get('chargesType'),
       paymentDay: Math.min(28, Math.max(1, Number(f.get('paymentDay')) || 1)),
+      frequency: [3, 6].includes(Number(f.get('frequency'))) ? Number(f.get('frequency')) : 1,
+      payTiming: f.get('payTiming') === 'arrears' ? 'arrears' : 'advance',
+      periodAnchor: null,
       deposit: parseMoney(f.get('deposit')) || 0,
       irl,
       revisionDate: rev ? rev.slice(5) : null,
@@ -2301,6 +2360,8 @@ const forms = {
       insuranceUntil: f.get('insuranceUntil') || null,
       notes: f.get('notes').trim(),
     };
+    // Periods of 3 or 6 months start from this month (by default the lease's first month).
+    if (data.frequency > 1) data.periodAnchor = f.get('periodAnchor') || periodOf(startDate);
     const rentHC = parseMoney(f.get('rent'));
     // Negative amounts, a mistyped year, insurance or revision dates far ahead,
     // a deposit above one month's rent (js/checks.js).
@@ -2444,6 +2505,12 @@ function defaultTrackFrom(startDate) {
 }
 
 const changes = {
+  leaseFreq: (el) => {
+    const f = el.form;
+    const box = f && f.querySelector('[data-freq-only]');
+    if (box) box.hidden = el.value === '1';
+    if (f && f.elements.periodAnchor && !f.elements.periodAnchor.value && f.elements.startDate.value) f.elements.periodAnchor.value = f.elements.startDate.value.slice(0, 7);
+  },
   leaseStart: (el) => {
     const tf = el.form && el.form.elements.trackFrom;
     if (tf && el.value) tf.value = defaultTrackFrom(el.value);
@@ -2524,8 +2591,9 @@ Object.assign(actions, {
     const list = leasesInPeriod(d.period);
     let doc = null;
     for (const l of list) {
+      if (!sendsIn(l, d.period)) continue;
       if (d.type === 'receipt') {
-        const row = ledger(l, state.payments, today()).rows.find((x) => x.period === d.period);
+        const row = periodReceipt(l, state.payments, d.period, today());
         if (!row || row.paid < row.total || row.total <= 0) continue;
       }
       if (doc) doc.addPage(); else doc = newPdf();

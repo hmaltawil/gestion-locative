@@ -70,11 +70,70 @@ export function dueForPeriod(lease, period) {
   };
 }
 
-export function dueDateFor(lease, period) {
+// ---------- payment frequency ----------
+// A lease is paid every month (default), every 3 or every 6 months, at the
+// start of each period (in advance, "à échoir", default) or at its end (in
+// arrears, "à terme échu"). Periods of 3 or 6 months start on
+// lease.periodAnchor ('YYYY-MM'; default: the lease's first month), and
+// repeat from there. The rent itself stays monthly: every month of a period
+// is due on the period's payment date.
+export function frequencyOf(lease) {
+  const f = Number(lease && lease.frequency);
+  return f === 3 || f === 6 ? f : 1;
+}
+
+export function timingOf(lease) {
+  return lease && lease.payTiming === 'arrears' ? 'arrears' : 'advance';
+}
+
+function monthIndex(period) {
   const { y, m } = splitPeriod(period);
+  return y * 12 + (m - 1);
+}
+
+// The months paid together with `period`: { start, end, months }, cut to the
+// lease's first and last months.
+export function billingPeriod(lease, period) {
+  const f = frequencyOf(lease);
+  if (f === 1) return { start: period, end: period, months: [period] };
+  const anchor = lease.periodAnchor || (lease.startDate ? periodOf(lease.startDate) : period);
+  let start = addMonths(anchor, Math.floor((monthIndex(period) - monthIndex(anchor)) / f) * f);
+  let end = addMonths(start, f - 1);
+  if (lease.startDate && start < periodOf(lease.startDate)) start = periodOf(lease.startDate);
+  if (lease.endDate && end > periodOf(lease.endDate)) end = periodOf(lease.endDate);
+  return { start, end, months: periodRange(start, end) };
+}
+
+// Payment date of a month: the payment day of the period's first month (in
+// advance) or of the month after the period (in arrears), never before the
+// lease starts.
+export function dueDateFor(lease, period) {
+  const g = billingPeriod(lease, period);
+  const month = timingOf(lease) === 'arrears' ? addMonths(g.end, 1) : g.start;
+  const { y, m } = splitPeriod(month);
   const day = Math.min(Number(lease.paymentDay) || 1, daysInMonth(y, m));
-  const d = `${period}-${pad2(day)}`;
+  const d = `${month}-${pad2(day)}`;
   return lease.startDate && d < lease.startDate ? lease.startDate : d;
+}
+
+// The amounts due for a whole period (one month for a monthly lease), added up.
+export function periodDue(lease, period) {
+  const g = billingPeriod(lease, period);
+  const parts = g.months.map((p) => dueForPeriod(lease, p));
+  if (parts.length === 1) return { ...parts[0], periodEnd: period, months: 1, dueDate: dueDateFor(lease, period) };
+  const sum = (k) => parts.reduce((s, x) => s + x[k], 0);
+  return {
+    period: g.start,
+    periodEnd: g.end,
+    months: parts.length,
+    rent: sum('rent'),
+    charges: sum('charges'),
+    total: sum('total'),
+    fromDate: parts[0].fromDate,
+    toDate: parts[parts.length - 1].toDate,
+    prorata: null,
+    dueDate: dueDateFor(lease, period),
+  };
 }
 
 export function firstTrackedPeriod(lease) {
@@ -178,22 +237,65 @@ export function ledger(lease, allPayments, today) {
   };
 }
 
+// One period's months put together, for its receipt: a full receipt only when
+// every month of it is paid. The account is looked at up to the period's last
+// month, so a payment made in advance for the whole period counts.
+// Null when no month of the period is tracked.
+export function periodReceipt(lease, payments, period, today) {
+  const g = billingPeriod(lease, period);
+  const lastDay = lastDayOfPeriod(g.end);
+  const led = ledger(lease, payments, lastDay > today ? lastDay : today);
+  const rows = led.rows.filter((r) => r.period >= g.start && r.period <= g.end);
+  if (!rows.length) return null;
+  if (rows.length === 1) return { ...rows[0], periodEnd: rows[0].period, months: 1 };
+  const sum = (k) => rows.reduce((s, r) => s + r[k], 0);
+  const total = sum('total');
+  const paid = sum('paid');
+  return {
+    kind: 'period',
+    period: rows[0].period,
+    periodEnd: rows[rows.length - 1].period,
+    months: rows.length,
+    rent: sum('rent'),
+    charges: sum('charges'),
+    total,
+    paid,
+    fromDate: rows[0].fromDate,
+    toDate: rows[rows.length - 1].toDate,
+    prorata: null,
+    dueDate: rows[0].dueDate,
+    paidDate: paid >= total ? rows.map((r) => r.paidDate).filter(Boolean).sort().pop() || null : null,
+    allocations: rows.flatMap((r) => r.allocations),
+    status: paid >= total && total > 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid',
+  };
+}
+
 // What the tenant has to pay next, when nothing is late: the oldest item still
 // owed, or else the next month's rent. Null for an ended lease with nothing owed.
 // { kind: 'period' | 'opening' | 'adjustment', period, label, amount, dueDate }
+// For a lease paid every 3 or 6 months, the whole period: { period, periodEnd }.
 export function nextPayment(lease, payments, today) {
-  const led = ledger(lease, payments, today);
+  const grouped = frequencyOf(lease) > 1;
+  // Paid by period: look at the account up to the end of the current period,
+  // so an advance already covering it isn't counted twice.
+  const curEnd = grouped ? lastDayOfPeriod(billingPeriod(lease, periodOf(today)).end) : today;
+  const led = ledger(lease, payments, curEnd > today ? curEnd : today);
   const open = led.debts.find((d) => d.total - d.paid > 0);
-  if (open) return { kind: open.kind, period: open.period || null, label: open.label || '', amount: open.total - open.paid, dueDate: open.dueDate };
+  if (open && open.kind === 'period' && grouped) {
+    const g = billingPeriod(lease, open.period);
+    const amount = led.rows.filter((r) => r.period >= g.start && r.period <= g.end).reduce((s, r) => s + r.total - r.paid, 0);
+    return { kind: 'period', period: g.start, periodEnd: g.end, label: '', amount, dueDate: open.dueDate };
+  }
+  if (open) return { kind: open.kind, period: open.period || null, periodEnd: open.period || null, label: open.label || '', amount: open.total - open.paid, dueDate: open.dueDate };
   if (!isActive(lease, today)) return null;
-  let p = addMonths(periodOf(today), 1);
+  let p = addMonths(grouped ? billingPeriod(lease, periodOf(today)).end : periodOf(today), 1);
   const first = firstTrackedPeriod(lease);
   if (first && first > p) p = first;
   if (lease.endDate && p > periodOf(lease.endDate)) return null;
-  const due = dueForPeriod(lease, p);
+  const due = periodDue(lease, p);
   // An advance already paid covers part of it.
   const amount = Math.max(0, due.total - led.credit);
-  return { kind: 'period', period: p, label: '', amount, dueDate: dueDateFor(lease, p) };
+  return { kind: 'period', period: due.period, periodEnd: due.periodEnd, label: '', amount, dueDate: due.dueDate };
 }
 
 // Who a payment came from, for receipts: the tenant, the CAF paying the housing
@@ -280,7 +382,7 @@ export function monthOverview(state, today) {
   for (const lease of state.leases) {
     const led = ledger(lease, state.payments, today);
     const row = led.rows.find((r) => r.period === p);
-    if (row) due += row.total;
+    due += dueInMonth(lease, p);
     overdue += led.overdue;
     if (isActive(lease, today) || led.owed > 0) items.push({ lease, ledger: led, row });
   }
@@ -291,22 +393,36 @@ export function monthOverview(state, today) {
   return { period: p, due, received, overdue, items };
 }
 
+// Rent and charges whose payment date falls in month `p` (a whole period for
+// a lease paid every 3 or 6 months, the month before for one paid in arrears).
+export function dueInMonth(lease, p) {
+  const first = firstTrackedPeriod(lease);
+  if (!first) return 0;
+  const last = lease.endDate ? periodOf(lease.endDate) : null;
+  let total = 0;
+  for (let q = addMonths(p, -6); q <= addMonths(p, 5); q = addMonths(q, 1)) {
+    if (q < first || (last && q > last)) continue;
+    if (periodOf(dueDateFor(lease, q)) === p) total += dueForPeriod(lease, q).total;
+  }
+  return total;
+}
+
 // What a rent call for `period` asks for: that month's rent and charges, less
 // anything already paid towards it, plus earlier unpaid months and the opening
 // balance, plus one-off charges due by the same date, less any advance.
 // The lease page and the monthly send both use this, so they always agree.
+// For a lease paid every 3 or 6 months, it covers the whole period holding `period`.
 export function rentCallBalance(lease, payments, period, today, withBalance = true) {
-  const due = { ...dueForPeriod(lease, period), dueDate: dueDateFor(lease, period) };
+  const due = periodDue(lease, period);
   if (!withBalance) return { due, paidTowards: 0, previous: 0, extras: [], credit: 0, total: due.total };
   const led = ledger(lease, payments, today);
-  const row = led.rows.find((r) => r.period === period);
-  const paidTowards = row ? row.paid : 0;
+  const paidTowards = led.rows.filter((r) => r.period >= due.period && r.period <= due.periodEnd).reduce((s, r) => s + r.paid, 0);
   let previous = 0;
   const extras = [];
   for (const d of led.debts) {
     const rest = d.total - d.paid;
     if (rest <= 0) continue;
-    if (d.kind === 'period') { if (d.period < period) previous += rest; }
+    if (d.kind === 'period') { if (d.period < due.period) previous += rest; }
     else if (d.kind === 'opening') previous += rest;
     else if (d.dueDate <= due.dueDate) extras.push({ label: d.label || '', date: d.dueDate, amount: rest });
   }

@@ -4,7 +4,7 @@ One place to see what's done, what's waiting, and what comes next. Update it at 
 
 **Status:** ✅ done · 🔜 next · ⏳ waiting on someone · ⏸️ on hold · ❌ dropped · 💡 idea, not planned yet
 
-**Where we are (7 Nov 2026):** milestones 1 to 4 are done, followed by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3), fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before), who paid on receipts, tenant or CAF (version 1.3.6), a warning for payments dated in the future (version 1.3.7) and a safety review (version 1.3.8: security, mistakes the app now questions, legal checks, backups). All of it is live and checked on the iPhone. A second code review (7 Nov 2026) brought version 1.3.9: long letters, the departure, erasing, share failures and legal points; it is live and checked on the iPhone. Version 1.3.10 replaces the handover checklist with setup steps for the user's iPhone. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL) and in the [Ideas](#ideas-backlog). **Next:** milestone 7, fixes from real use, as they come up. The user enters their own data on their own iPhone: there is no handover from the owner's phone and no import from Gestion Locative Facile (milestone 5 dropped on 7 Nov 2026). The tuned bank import (milestone 6) stays [on hold](#on-hold).
+**Where we are (7 Nov 2026):** milestones 1 to 4 are done, followed by a full code review (version 1.3.1: wrong numbers, backup safety, privacy and legal fixes), screen polish (versions 1.3.2 and 1.3.3), fixes from real use (version 1.3.4: correcting a lease's rent; version 1.3.5: why a reminder can't be sent yet, and money owed from before), who paid on receipts, tenant or CAF (version 1.3.6), a warning for payments dated in the future (version 1.3.7) and a safety review (version 1.3.8: security, mistakes the app now questions, legal checks, backups). All of it is live and checked on the iPhone. A second code review (7 Nov 2026) brought version 1.3.9: long letters, the departure, erasing, share failures and legal points; it is live and checked on the iPhone. Version 1.3.10 replaces the handover checklist with setup steps for the user's iPhone, and 1.3.11 adds rent paid every 3 or 6 months. The review's open points are in [Waiting](#waiting-on-you) (questions for the ADIL) and in the [Ideas](#ideas-backlog). **Next:** milestone 7, fixes from real use, as they come up. The user enters their own data on their own iPhone: there is no handover from the owner's phone and no import from Gestion Locative Facile (milestone 5 dropped on 7 Nov 2026). The tuned bank import (milestone 6) stays [on hold](#on-hold).
 
 ## How we work
 
@@ -210,6 +210,16 @@ Asked for on 7 Nov 2026 ("replace the handover checklist with setup steps"), aft
 - [x] Settings › "Setup and support" (was "Handover and support"): eight steps to set up the user's iPhone from scratch: a new private repository, a token for their phone, a new passphrase on paper, adding the app to the home screen (with the app's own address), connecting as main phone, what to do if the repository already holds a backup, a read-only token for the owner's support copy, and never deleting the icon
 - [x] The anonymised support file stays in the same card
 
+### ✅ Version 1.3.11 · Rent paid every 3 or 6 months (7 Nov 2026)
+Asked for on 7 Nov 2026 ("I want to be able to choose the payment frequency and edit the current leases and make sure that it shows on the receipt"). Waiting for the iPhone check (see [Waiting](#waiting-on-you)).
+- [x] Lease form (new and existing leases): payment frequency (monthly, every 3 months, every 6 months), paid at the start of the period (in advance) or at its end (in arrears), and the month a period starts (for example January for calendar quarters)
+- [x] Every month of a period is due on the period's payment date, so a tenant paying at the end of the quarter isn't shown as late before then
+- [x] One payment for the whole period is recorded without the "much more than owed" question
+- [x] Receipts cover the whole period: one receipt per quarter or half-year ("au titre du paiement trimestriel… pour la période du 01/10 au 31/12", rent and charges with "(3 mois)"), from the lease page, the receipt list and the monthly send
+- [x] Rent calls cover the whole period ("Loyer trimestriel : octobre à décembre"), with the period's payment date
+- [x] Monthly send: such a lease appears in the first month of each period; the other months say which period paid them
+- [x] The lease page shows the payment terms and the current period; "Expected this month" on the home screen counts a whole period in the month it's due; the bank import matches a whole period's amount
+
 ---
 
 ## Waiting on you
@@ -256,9 +266,11 @@ Asked for on 7 Nov 2026 ("replace the handover checklist with setup steps"), aft
   - [x] A lease › Departure: "Lease end" and "Keys returned on" both show; the statement counts rent up to the lease end
   - [x] Settings › Back up: the share menu opens and "Backup created" shows after saving to Files
   - [x] Settings › About: the two erase buttons and their explanations are clear
-- ⏳ **Version 1.3.10 to check on the iPhone**
-  - [ ] Settings › About shows 1.3.10
+- ⏳ **Versions 1.3.10 and 1.3.11 to check on the iPhone**
+  - [ ] Settings › About shows 1.3.11
   - [ ] Settings › Setup and support › "Set up the app on the user's iPhone" shows the eight steps, with the app's address in step 4
+  - [ ] A lease › Edit: choose "Quarterly", save; the lease page shows "Payment: Quarterly…" with the current period
+  - [ ] Record one payment of 3 months: no question; Receipt shows one line for the quarter, and its PDF says "paiement trimestriel" with the 3 months' dates
 - ✅ **GitHub backup for the user's iPhone:** connected on 7 Nov 2026 to its own new private repository, with the data they had already entered. Still to do whenever convenient: the owner's phone disconnects from `locatif-sauvegarde` (test data only), then connects later as a support copy with a read-only token
 - ⏳ **Legal check, done once:** have the guarantor agreement, formal notice and deposit return letter reviewed, for example by your local ADIL. Questions to ask:
   - Guarantor agreement: since 2022 (article 2297 of the Civil Code), is the handwritten statement now complete (amount in figures and words; for a joint guarantee, the acknowledgment that the landlord need not pursue the tenant first)?
@@ -342,6 +354,7 @@ Goal: a monthly routine of about 5 minutes. Download the bank file, import it, t
 - Line 230 of form 2044 is entered by hand, from the managing agent's yearly statement
 - The charges reconciliation assumes one tenant at a time per property (a warning shows otherwise)
 - The tax summary is a guide; check it against that year's form 2044 instructions
+- A lease's payment frequency applies to the whole lease, past months included (switching a lease with unpaid past months from monthly to quarterly moves their payment dates)
 - Diagnostic validity rules are simplified (older DPEs have special rules); expiry dates can be edited
 - Exporting to the Calendar again creates duplicate events unless the old ones are deleted first
 - The bank import is generic (tuning it to CIC and Crédit Agricole is on hold with milestone 6)

@@ -185,6 +185,11 @@ function cleanState(s) {
     if ('trackFrom' in l) l.trackFrom = cleanMonth(l.trackFrom);
     if (l.revisionDate !== undefined && l.revisionDate !== null && !/^\d{2}-\d{2}$/.test(String(l.revisionDate))) l.revisionDate = null;
     l.paymentDay = Math.min(28, Math.max(1, cleanNum(l.paymentDay) || 1));
+    // Payment frequency (1.3.11): every 1, 3 or 6 months, at the start or the end of each period.
+    // Absent means monthly, in advance (calc.js frequencyOf, timingOf).
+    if ('frequency' in l) l.frequency = [3, 6].includes(Number(l.frequency)) ? Number(l.frequency) : 1;
+    if ('payTiming' in l) l.payTiming = l.payTiming === 'arrears' ? 'arrears' : 'advance';
+    if ('periodAnchor' in l) l.periodAnchor = cleanMonth(l.periodAnchor);
     for (const k of ['deposit', 'openingBalance']) if (k in l) l[k] = cleanNum(l[k]);
     l.tenants = objects(l.tenants);
     l.rents = objects(l.rents).filter((r) => cleanMonth(r.from)).map((r) => ({ ...r, rent: cleanNum(r.rent), charges: cleanNum(r.charges) }));
