@@ -4,7 +4,7 @@ One place to see what's open, what's next and what's done. Update it at the end 
 
 **Status:** ✅ done · 🔜 next · ⏳ open · ⏸️ on hold · ❌ dropped · 💡 idea, not planned yet
 
-**Where we are (8 Nov 2026):** version 1.3.11 is live and checked on the iPhone; 1.3.12 (housekeeping, no visible change) waits for its check. The user runs the app on their own iPhone, enters their own data, and backs up to their own private GitHub repository. **Next:** milestone 7, fixes from real use, as they come up. What's still open is listed just below.
+**Where we are (8 Nov 2026):** version 1.3.12 is live and checked on the iPhone. The user runs the app on their own iPhone, enters their own data, and backs up to their own private GitHub repository. **Next:** milestone 7, fixes from real use, as they come up. What's still open is listed just below.
 
 ## Open items
 
@@ -15,8 +15,7 @@ One place to see what's open, what's next and what's done. Update it at the end 
   - Deposit returned late: the app adds the penalty (10% of the rent per started month) and notes that it is not due if the tenant gave no new address. Correct?
 
 **To do when convenient**
-- ⏳ **Version 1.3.12 to check on the iPhone:** Settings › About shows 1.3.12, and the app works as before (home, a lease, a receipt PDF, Settings). Nothing visible changed: unused code was removed.
-- ⏳ **Your test phone:** Settings › Automatic backup › Disconnect. Its repository `locatif-sauvegarde` and token were deleted on 8 Nov 2026, so until then that phone shows backup errors. To help the user later, connect as **Support copy** to their repository with a read-only token (Settings › Setup and support, step 7).
+- ⏳ **When you want to help the user:** connect your phone as **Support copy** to their repository with a read-only token and their passphrase (Settings › Setup and support, step 7). Your test phone is disconnected, and the old test repository and its token were deleted (8 Nov 2026).
 - ⏳ **The user's leases that were already running:** for a complete 2026 tax summary and charges reconciliation, set Edit › Start of tracking to January 2026 and enter the payments since then (or what was owed at that date).
 - ⏳ **Before cancelling Gestion Locative Facile:** export its data and keep the files privately (not in this repository), as a record of past rents and receipts. On a computer: log in at immobilierloyer.com, tick Outils › Préférences › Réglages › Réglages avancés › "Export des données", then use **Exporter** on each page.
 - ⏳ **Optional, fewer permission prompts for Claude:** add `.claude/settings.json` to this repository yourself (Claude isn't allowed to change its own permissions).
@@ -111,6 +110,7 @@ Every version below is live and was checked on the iPhone. Details are in each c
 | 1.3.9 | 7 Nov 2026 | Second code review: long letters continue on a new page, departure keeps lease end and keys date apart, deposit books the amount actually returned, honest erase plus "Remove everything from this device", revision rounds down, "1.200" = 1 200 €, legal points (fixed charges, G/F/E homes, late reconciliation), CSV and encryption hardening | [`6bc4dfa`](https://github.com/hmaltawil/gestion-locative/commit/6bc4dfa) |
 | 1.3.10 | 7 Nov 2026 | Settings › Setup and support: steps to set up the user's iPhone from scratch with its own backup repository | [`77ddd25`](https://github.com/hmaltawil/gestion-locative/commit/77ddd25) |
 | 1.3.11 | 7 Nov 2026 | Rent paid every 3 or 6 months, in advance or in arrears: no false "late", one receipt and one rent call per period | [`70433ee`](https://github.com/hmaltawil/gestion-locative/commit/70433ee) |
+| 1.3.12 | 8 Nov 2026 | Housekeeping: unused code removed, no visible change | [`70985ad`](https://github.com/hmaltawil/gestion-locative/commit/70985ad) |
 
 ## How we work
 
