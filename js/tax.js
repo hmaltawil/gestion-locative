@@ -2,7 +2,7 @@
 // Rents are counted when they were received (cash basis), excluding charges.
 // This is a guide: check every figure against that year's 2044 instructions.
 
-import { ledger, rentAt, isActive } from './calc.js';
+import { ledger, rentAt } from './calc.js';
 import { occupancyDays } from './charges.js';
 import { _dicts } from './i18n.js';
 
@@ -117,7 +117,6 @@ export function taxSummary(state, year, today) {
     forfaitCharges: props.reduce((s, p) => s + p.forfait, 0),
     microEligible: gross <= MICRO_FONCIER_LIMIT,
     microTaxable: Math.round(gross * 0.7),
-    activeLeases: state.leases.filter((l) => isActive(l, `${year}-12-31`)).length,
   };
 }
 

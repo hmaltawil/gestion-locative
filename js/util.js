@@ -34,10 +34,6 @@ export function lastDayOfPeriod(period) {
   return `${period}-${pad2(daysInMonth(y, m))}`;
 }
 
-export function comparePeriods(a, b) {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-
 export function addDays(dateStr, n) {
   const [y, m, d] = dateStr.split('-').map(Number);
   return todayStr(new Date(y, m - 1, d + n));

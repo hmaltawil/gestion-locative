@@ -6,10 +6,6 @@ export const DAILY_KEEP_DAYS = 14;
 export const EVENT_KEEP = 10;
 export const TRASH_KEEP_DAYS = 15;
 
-export function dayOf(iso) {
-  return iso.slice(0, 10);
-}
-
 export function needsDaily(snaps, today) {
   return !snaps.some((s) => s.reason === 'daily' && s.day === today);
 }

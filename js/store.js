@@ -103,10 +103,6 @@ export async function allFileIds() {
   return (await tx(FILES, 'readonly', (s) => s.getAllKeys())) || [];
 }
 
-export async function clearFiles() {
-  return tx(FILES, 'readwrite', (s) => s.clear());
-}
-
 // ---------- snapshots (automatic copies kept on the device) ----------
 // { id, at: ISO date-time, day: 'YYYY-MM-DD', reason, counts, state }
 export function putSnapshot(snap) {

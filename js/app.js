@@ -31,7 +31,7 @@ import {
 } from './checks.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.3.11';
+export const APP_VERSION = '1.3.12';
 
 let state = emptyState();
 const root = document.getElementById('app');
