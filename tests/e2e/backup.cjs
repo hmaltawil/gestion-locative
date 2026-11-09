@@ -26,6 +26,8 @@ function github(who) { return async (route) => {
     const path = decodeURIComponent(m[1]);
     if (req.method() === 'GET') {
       const ref = u.searchParams.get('ref');
+      // One lost connection, on the last call of a restore (1.3.14).
+      if (!ref && path === 'backup/data.json.enc' && repo.dropLatestFor === who) { repo.dropLatestFor = null; return route.abort(); }
       const f = ref ? repo.commits.find((c) => c.sha === ref && c.path === path) : repo.files.get(path);
       if (!f) return reply(404, { message: 'Not Found' });
       if ((req.headers().accept || '').includes('raw')) return reply(200, f.text, true);
@@ -158,6 +160,17 @@ async function phone(browser, name) {
   await B.page.waitForTimeout(9000);
   log('empty phone B did not overwrite the backup:', !repo.puts.slice(putsBefore).some((x) => x.who === 'phoneB'), '| uploads during wait by:', JSON.stringify(repo.puts.slice(putsBefore).map((x) => x.who)));
   await B.page.screenshot({ path: OUT + '/phoneB-versions.png' });
+  // The connection drops at the last step of the restore: an error, and nothing is replaced.
+  repo.dropLatestFor = 'phoneB';
+  await B.page.click('#sheet [data-action=ghRestoreVersion] >> nth=0');
+  await B.page.waitForFunction(() => document.querySelector('#toast.error.show'), null, { timeout: 15000 });
+  const dropToast = await B.page.textContent('#toast');
+  await B.nav('#/');
+  const stillEmpty = await B.page.locator('.welcome').count();
+  log('restore interrupted at the last step:', dropToast, '| phone B still empty:', stillEmpty === 1);
+  if (stillEmpty !== 1) throw new Error('an interrupted restore replaced the data in memory');
+  await B.nav('#/settings'); await B.page.click('[data-action=ghRestore]');
+  await B.page.waitForSelector('#sheet [data-action=ghRestoreVersion]', { timeout: 10000 });
   await B.page.click('#sheet [data-action=ghRestoreVersion] >> nth=0');
   await B.page.waitForSelector('.tiles', { timeout: 15000 });
   await B.nav('#/properties'); await B.page.click('text=Appartement Gambetta');
@@ -224,6 +237,6 @@ async function phone(browser, name) {
   log('after "save anyway", phone A saved:', await waitPut('phoneA', mark));
   if (repo.files.get('backup/data.json.enc').text === latest) throw new Error('save anyway did not save');
 
-  log('ERRORS:', JSON.stringify([...A.errors, ...B.errors, ...C.errors].filter((e) => !/Failed to load resource: the server responded with a status of (401|404|409)/.test(e))));
+  log('ERRORS:', JSON.stringify([...A.errors, ...B.errors, ...C.errors].filter((e) => !/Failed to load resource: the server responded with a status of (401|404|409)|net::ERR_FAILED/.test(e))));
   await browser.close();
 })().catch((e) => { console.error('FAILED', e.message.split('\n').slice(0, 4).join(' | ')); process.exit(1); });

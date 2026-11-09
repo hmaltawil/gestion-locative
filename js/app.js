@@ -31,7 +31,7 @@ import {
 } from './checks.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.3.13';
+export const APP_VERSION = '1.3.14';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -47,11 +47,59 @@ async function persist() {
   }
 }
 
-function commit(fn) {
+function commit(fn, draw = render) {
   fn(state);
   persist();
-  render();
+  draw();
   afterChange();
+}
+
+// On the screens that are redrawn while they are filled in (charges
+// reconciliation, departure), a field change must not redraw at once: the
+// change arrives between the press and the release of the next tap, and
+// replacing the button or field being tapped would lose that tap. So the
+// redraw waits until the tap is over, and keeps the field then in use.
+let pressing = false;
+let redrawDue = false;
+let redrawTimer = null;
+
+function redraw() {
+  redrawDue = true;
+  clearTimeout(redrawTimer);
+  redrawTimer = setTimeout(redrawNow, pressing ? 1500 : 80);
+}
+
+function redrawNow() {
+  if (!redrawDue) return;
+  const a = document.activeElement;
+  const keep = a && a.dataset && a.dataset.change && root.contains(a)
+    ? a.tagName.toLowerCase() + Object.entries(a.dataset).map(([k, v]) => `[data-${k.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())}="${CSS.escape(v)}"]`).join('')
+    : null;
+  let caret = null;
+  try { if (keep && a.selectionStart !== null) caret = [a.selectionStart, a.selectionEnd]; } catch (e) { /* a date or a tick box */ }
+  render();
+  const again = keep && root.querySelector(keep);
+  if (!again) return;
+  again.focus({ preventScroll: true });
+  try { if (caret) again.setSelectionRange(caret[0], caret[1]); } catch (e) { /* not a text field */ }
+}
+
+document.addEventListener('pointerdown', () => { pressing = true; }, true);
+for (const type of ['pointerup', 'pointercancel']) {
+  document.addEventListener(type, () => {
+    pressing = false;
+    if (redrawDue) { clearTimeout(redrawTimer); redrawTimer = setTimeout(redrawNow, 80); }
+  }, true);
+}
+
+// The fields of those screens. When a button is tapped while one of them is
+// still being typed in (on the iPhone a tap on a button does not always close
+// the field first), what was typed is taken into account before the button acts.
+const DRAFT_FIELDS = ['regLine', 'regOpt', 'depField', 'depDed'];
+function takeTypedField() {
+  const a = document.activeElement;
+  if (!a || a.tagName !== 'INPUT' || !a.dataset || !DRAFT_FIELDS.includes(a.dataset.change)) return;
+  if (a.value !== a.defaultValue && root.contains(a)) changes[a.dataset.change](a);
 }
 
 const byId = (list, id) => list.find((x) => x.id === id);
@@ -219,6 +267,8 @@ function tabbar(active) {
 }
 
 function render() {
+  redrawDue = false;
+  clearTimeout(redrawTimer);
   const r = route();
   const views = {
     home: viewHome,
@@ -1776,9 +1826,12 @@ async function ghRestoreVersion(sha) {
       const bytes = await decryptBytes(env, g.passphrase);
       await putFile(d.id, { name: d.name, type: d.type, data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) });
     }
+    // Last call to GitHub, before anything is replaced: if it fails, the
+    // data on this phone stays as it was.
+    const latestSha = await getSha(cfg, DATA_PATH);
     state = next;
     const m = syncMeta();
-    m.dataSha = await getSha(cfg, DATA_PATH);
+    m.dataSha = latestSha;
     m.uploadedDocs = next.documents.map((d) => d.id);
     m.lastCounts = snapCounts(next);
     m.lastError = null;
@@ -2010,14 +2063,6 @@ function noticeWithoutReminderSheet(l) {
     </div>`);
 }
 
-function endLeaseSheet(leaseId) {
-  openSheet(t('endLease'), `<form class="form" data-form="endLease" data-lease="${leaseId}">
-      ${field(t('endDate'), input('endDate', today(), 'type="date" required'))}
-      <p class="hint">${esc(t('endLeaseHint'))}</p>
-      <button class="btn block" type="submit">${esc(t('save'))}</button>
-    </form>`);
-}
-
 // ---------------------------------------------------------------- checks (js/checks.js)
 
 // Formats a check's raw params for its message.
@@ -2092,7 +2137,6 @@ const actions = {
   receiptPicker: (d) => receiptSheet(d.lease),
   changeRent: (d) => changeRentSheet(d.lease),
   indexation: (d) => indexationSheet(d.lease),
-  endLease: (d) => endLeaseSheet(d.lease),
   fillAmount: (d, el) => { const f = el.closest('form'); f.elements.amount.value = d.value; },
   // The receipt for the whole period holding that month (the month itself for a monthly lease).
   receipt: (d) => {
@@ -2466,13 +2510,6 @@ const forms = {
     });
     toast(t('rentUpdated', { amount: fmtMoney(info.newRent) }));
   },
-  endLease: (f, form) => {
-    const endDate = f.get('endDate');
-    const l = leaseOf(form.dataset.lease);
-    if (endDate < l.startDate) { toast(t('endBeforeStart'), 'error'); return; }
-    closeSheet();
-    commit((s) => { s.leases.find((x) => x.id === l.id).endDate = endDate; });
-  },
   expense: (f, form) => {
     const amount = parseMoney(f.get('amount'));
     if (amount === null) { toast(t('amountInvalid'), 'error'); return; }
@@ -2764,7 +2801,7 @@ function persistDeparture(leaseId) {
   commit((s) => {
     const x = s.leases.find((y) => y.id === leaseId);
     x.departure = { ...x.departure, inventoryMatches: ses.inventoryMatches, deductions: ses.deductions.map((z) => ({ ...z })), retention: ses.retention, newAddress: ses.newAddress };
-  });
+  }, redraw);
 }
 
 Object.assign(forms, {
@@ -2917,7 +2954,7 @@ Object.assign(changes, {
     const line = sessions.reg[el.dataset.key].lines[Number(el.dataset.i)];
     if (el.dataset.f === 'amount') line.amount = parseMoney(el.value) || 0;
     else line.label = el.value;
-    render();
+    redraw();
   },
   regOpt: (el) => {
     const ses = sessions.reg[el.dataset.key];
@@ -2925,7 +2962,7 @@ Object.assign(changes, {
     if (k === 'updateProvision') ses.updateProvision = el.checked;
     else if (k === 'newMonthly') ses.newMonthly = Math.max(0, parseMoney(el.value) || 0);
     else ses[k] = el.value;
-    render();
+    redraw();
   },
   depField: (el) => {
     const dl0 = leaseOf(el.dataset.lease);
@@ -2936,7 +2973,7 @@ Object.assign(changes, {
     else if (k === 'retention') ses.retention = parseMoney(el.value) || 0;
     else ses[k] = el.value;
     persistDeparture(el.dataset.lease);
-    render();
+    redraw();
   },
   depDed: (el) => {
     const dl0 = leaseOf(el.dataset.lease);
@@ -2945,7 +2982,7 @@ Object.assign(changes, {
     if (el.dataset.f === 'amount') line.amount = Math.max(0, parseMoney(el.value) || 0);
     else line.label = el.value;
     persistDeparture(el.dataset.lease);
-    render();
+    redraw();
   },
   diagAuto: (el) => {
     const f = el.form;
@@ -3064,7 +3101,11 @@ document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
   if (!el || el.disabled) return;
   const fn = actions[el.dataset.action];
-  if (fn) { e.preventDefault(); fn(el.dataset, el, e); }
+  if (!fn) return;
+  e.preventDefault();
+  takeTypedField();
+  fn(el.dataset, el, e);
+  redrawNow(); // a redraw that was waiting for this tap
 });
 
 document.addEventListener('submit', (e) => {
@@ -3072,7 +3113,9 @@ document.addEventListener('submit', (e) => {
   if (!form) return;
   e.preventDefault();
   const fn = forms[form.dataset.form];
-  if (fn) fn(new FormData(form), form);
+  if (!fn) return;
+  takeTypedField();
+  fn(new FormData(form), form);
 });
 
 document.addEventListener('change', (e) => {

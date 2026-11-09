@@ -4,7 +4,7 @@ One place to see what's open, what's next and what's done. Update it at the end 
 
 **Status:** ✅ done · 🔜 next · ⏳ open · ⏸️ on hold · ❌ dropped · 💡 idea, not planned yet
 
-**Where we are (9 Nov 2026):** version 1.3.12 is live and checked on the iPhone. Version 1.3.13 (two money fixes from the third code review) went live on 9 Nov 2026 and **waits for your check on the iPhone**. The user runs the app on their own iPhone, enters their own data, and backs up to their own private GitHub repository. **Next:** milestone 7, fixes from real use, as they come up. What's still open is listed just below.
+**Where we are (9 Nov 2026):** version 1.3.12 is live and checked on the iPhone. Version 1.3.13 (two money fixes from the third code review) went live on 9 Nov 2026 and **waits for your check on the iPhone**. Version 1.3.14 (three smaller fixes) is ready on the branch `claude/intelligent-clarke-6p3lga`: it goes live when you say so. The user runs the app on their own iPhone, enters their own data, and backs up to their own private GitHub repository. **Next:** milestone 7, fixes from real use, as they come up. What's still open is listed just below.
 
 ## Open items
 
@@ -28,11 +28,14 @@ One place to see what's open, what's next and what's done. Update it at the end 
 - [x] **1.3.13, third code review (live since 9 Nov 2026, [`c331ab0`](https://github.com/hmaltawil/gestion-locative/commit/c331ab0), to check on the iPhone):**
   - A rent revision and new monthly charges (from a charges reconciliation or "Change rent") recorded for different months no longer undo each other; recorded for the same month, both are kept. Undoing a reconciliation gives the old charges back and keeps the revision. "Change rent" shows the amounts in force in the month you choose.
   - A lease paid **in advance** every 3 or 6 months and not paid owes the whole period from its payment date (before: one more month each month), on the home screen, the lease page, the reminder and the formal notice.
-- [ ] Also found by the third code review, not fixed yet:
-  - A charges reconciliation that is overdue drops off the deadlines list on 1 January (the one for 2025 disappears on 1 Jan 2027 even if it was never done)
-  - Charges reconciliation and departure screens: after typing an amount, the first tap on a button can be lost (seen in Chrome; to check on the iPhone)
-  - A restore from GitHub interrupted at its last step shows an error but keeps the restored data in memory, unsaved (found by reading, not reproduced)
-  - Leftover unused code: the old "end lease" window
+- [x] **1.3.14, the smaller findings of the third code review (9 Nov 2026), ready on the branch `claude/intelligent-clarke-6p3lga`, not live yet:**
+  - Charges reconciliation and departure screens: a tap made right after typing is no longer lost. The button acts on the first tap with what was just typed, and tapping the next field leaves it ready to type in. Tested with a mouse and an emulated finger; **to check on the iPhone**.
+  - A restore from GitHub interrupted at its last step (connection lost) now leaves the phone's data as it was; before, the restored data stayed in memory, unsaved.
+  - Unused code removed: the old "end lease" window.
+- [ ] **To look into (your decision), from the third code review: an overdue charges reconciliation disappears from the deadlines list.**
+  - What happens today: the deadlines list only reminds you of the reconciliation for **last year**. During 2026 it shows "Charges reconciliation 2025" with the date 31 Dec 2026. On 1 Jan 2027 the list moves on to 2026, and the line for 2025 is gone, even if you never did it.
+  - Why it matters: you can still do the 2025 reconciliation after that date (charges can be claimed for 3 years, and the app handles a late one), but nothing reminds you any more.
+  - What to decide: for how many past years should the reminder stay until the reconciliation is done? Suggestion: last year always, as today; the two years before only for leases the app was already tracking in that year, so leases entered recently don't show false overdue lines for years handled outside the app.
 - [ ] Bugs and annoyances found on the iPhone, as they come up
 - [ ] Search across tenants, properties and payments
 - [ ] Small wording and layout fixes

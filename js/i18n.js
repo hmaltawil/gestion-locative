@@ -44,7 +44,7 @@ const fr = {
   confirmDeletePropertyLeases: 'Supprimer ce bien, ses {n} bail(s) et tous leurs paiements ? Cette action est définitive.',
   confirmDeletePropertyTax: "Supprimer ce bien, ses {n} bail(s) et tous leurs paiements ? Les paiements de {years} disparaîtront aussi des résumés fiscaux de ces années. Pour les garder, terminez plutôt les baux (date de fin). Cette action est définitive.",
 
-  addLease: 'Ajouter un bail', editLease: 'Modifier le bail', deleteLease: 'Supprimer ce bail', endLease: 'Terminer le bail',
+  addLease: 'Ajouter un bail', editLease: 'Modifier le bail', deleteLease: 'Supprimer ce bail',
   needPropertyFirst: "Ajoutez d'abord un bien.",
   propertyAndTenants: 'Bien et locataires', property: 'Bien', tenantName: 'Nom du locataire', coTenantName: 'Nom du colocataire',
   addCoTenant: 'Ajouter un colocataire', email: 'E-mail', phone: 'Téléphone', tenant: 'Locataire',
@@ -85,7 +85,6 @@ const fr = {
   confirmDeleteLease: 'Supprimer ce bail et tous ses paiements ? Cette action est définitive.',
   confirmDeleteLeaseTax: "Supprimer ce bail et tous ses paiements ? Ses paiements de {years} disparaîtront aussi des résumés fiscaux de ces années. Pour les garder, laissez plutôt le bail dans « Terminés » (avec une date de fin). Cette action est définitive.",
   confirmDeletePayment: 'Supprimer ce paiement ?',
-  endLeaseHint: 'Le dernier mois sera calculé au prorata.',
 
   amount: 'Montant', date: 'Date', method: 'Mode de paiement', note: 'Note',
   method_transfer: 'Virement', method_cheque: 'Chèque', method_cash: 'Espèces', method_directDebit: 'Prélèvement', method_caf: 'CAF / APL', method_other: 'Autre',
@@ -428,7 +427,7 @@ const en = {
   confirmDeletePropertyLeases: 'Delete this property, its {n} lease(s) and all their payments? This cannot be undone.',
   confirmDeletePropertyTax: 'Delete this property, its {n} lease(s) and all their payments? Payments from {years} will also disappear from those years\' tax summaries. To keep them, end the leases instead (end date). This cannot be undone.',
 
-  addLease: 'Add a lease', editLease: 'Edit lease', deleteLease: 'Delete this lease', endLease: 'End the lease',
+  addLease: 'Add a lease', editLease: 'Edit lease', deleteLease: 'Delete this lease',
   needPropertyFirst: 'Add a property first.',
   propertyAndTenants: 'Property and tenants', property: 'Property', tenantName: 'Tenant name', coTenantName: 'Co-tenant name',
   addCoTenant: 'Add a co-tenant', email: 'Email', phone: 'Phone', tenant: 'Tenant',
@@ -469,7 +468,6 @@ const en = {
   confirmDeleteLease: 'Delete this lease and all its payments? This cannot be undone.',
   confirmDeleteLeaseTax: 'Delete this lease and all its payments? Its payments from {years} will also disappear from those years\' tax summaries. To keep them, leave the lease in "Ended" instead (with an end date). This cannot be undone.',
   confirmDeletePayment: 'Delete this payment?',
-  endLeaseHint: 'The last month is charged pro rata.',
 
   amount: 'Amount', date: 'Date', method: 'Payment method', note: 'Note',
   method_transfer: 'Bank transfer', method_cheque: 'Cheque', method_cash: 'Cash', method_directDebit: 'Direct debit', method_caf: 'CAF / housing aid', method_other: 'Other',
