@@ -4,7 +4,7 @@ One place to see what's open, what's next and what's done. Update it at the end 
 
 **Status:** ✅ done · 🔜 next · ⏳ open · ⏸️ on hold · ❌ dropped · 💡 idea, not planned yet
 
-**Where we are (8 Nov 2026):** version 1.3.12 is live and checked on the iPhone. The user runs the app on their own iPhone, enters their own data, and backs up to their own private GitHub repository. **Next:** milestone 7, fixes from real use, as they come up. What's still open is listed just below.
+**Where we are (9 Nov 2026):** version 1.3.12 is live and checked on the iPhone. Version 1.3.13 (two money fixes from the third code review) is ready on the branch `claude/intelligent-clarke-6p3lga`: it goes live when you say so, then needs your check on the iPhone. The user runs the app on their own iPhone, enters their own data, and backs up to their own private GitHub repository. **Next:** milestone 7, fixes from real use, as they come up. What's still open is listed just below.
 
 ## Open items
 
@@ -25,6 +25,14 @@ One place to see what's open, what's next and what's done. Update it at the end 
 ## Next
 
 ### 🔜 Milestone 7 · Version 1.4 · Fixes from real use
+- [x] **1.3.13, third code review (9 Nov 2026), ready, not live yet:**
+  - A rent revision and new monthly charges (from a charges reconciliation or "Change rent") recorded for different months no longer undo each other; recorded for the same month, both are kept. Undoing a reconciliation gives the old charges back and keeps the revision. "Change rent" shows the amounts in force in the month you choose.
+  - A lease paid **in advance** every 3 or 6 months and not paid owes the whole period from its payment date (before: one more month each month), on the home screen, the lease page, the reminder and the formal notice.
+- [ ] Also found by the third code review, not fixed yet:
+  - A charges reconciliation that is overdue drops off the deadlines list on 1 January (the one for 2025 disappears on 1 Jan 2027 even if it was never done)
+  - Charges reconciliation and departure screens: after typing an amount, the first tap on a button can be lost (seen in Chrome; to check on the iPhone)
+  - A restore from GitHub interrupted at its last step shows an error but keeps the restored data in memory, unsaved (found by reading, not reproduced)
+  - Leftover unused code: the old "end lease" window
 - [ ] Bugs and annoyances found on the iPhone, as they come up
 - [ ] Search across tenants, properties and payments
 - [ ] Small wording and layout fixes

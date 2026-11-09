@@ -40,9 +40,31 @@ export function rentEntryToCorrect(lease, today) {
 // history (earlier amounts, revisions, later changes) is kept.
 export function correctRent(lease, today, rent, charges) {
   const entry = rentEntryToCorrect(lease, today);
-  const fixed = entry ? { ...entry, rent, charges } : { from: periodOf(lease.startDate), rent, charges, reason: 'initial' };
-  return [...sortedRents(lease).filter((r) => r.from !== fixed.from), fixed]
-    .sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0));
+  if (!entry) return [{ from: periodOf(lease.startDate), rent, charges, reason: 'initial' }];
+  const { from, rent: _rent, charges: _charges, ...rest } = entry;
+  return changeRentFrom(lease, from, { rent, charges }, rest);
+}
+
+// The lease's rents with a new amount from month `from`. `change` holds what
+// changes: { rent }, { charges } or both; the other amount stays as it is in
+// force that month. Each entry stores rent and charges together, so the later
+// entries that only carried the old amount forward take the new one too, up
+// to the first that set its own (a revision must not end when new charges
+// start a month later, nor new charges when a revision does).
+// `extra` is kept on the entry (reason, note, regYear).
+export function changeRentFrom(lease, from, change, extra = {}) {
+  const rents = sortedRents(lease).map((r) => ({ ...r }));
+  const before = rents.length ? rentAt(lease, from) : { rent: 0, charges: 0 };
+  const entry = { from, rent: before.rent, charges: before.charges, ...change, ...extra };
+  const later = rents.filter((r) => r.from > from);
+  for (const k of ['rent', 'charges']) {
+    if (entry[k] === before[k]) continue;
+    for (const r of later) {
+      if (r[k] !== before[k]) break;
+      r[k] = entry[k];
+    }
+  }
+  return [...rents.filter((r) => r.from < from), entry, ...later];
 }
 
 // Amount due for one month, pro-rated for the first and last month.
@@ -142,7 +164,8 @@ export function firstTrackedPeriod(lease) {
   return start;
 }
 
-// Full account of a lease up to the current month.
+// Full account of a lease up to the current month (up to the end of the
+// current period for a lease paid in advance every 3 or 6 months).
 // Payments are applied oldest-first: to the opening balance, each month and
 // any one-off charge, in order of due date. This handles late, partial and
 // catch-up payments. Each debt keeps its allocations (date, amount) so the
@@ -153,6 +176,9 @@ export function ledger(lease, allPayments, today) {
   const currentP = periodOf(today);
   const startP = firstTrackedPeriod(lease);
   let endP = currentP;
+  // Paid in advance every 3 or 6 months: the whole period is due on its
+  // payment date, so all its months count from the start, not one by one.
+  if (frequencyOf(lease) > 1 && timingOf(lease) === 'advance' && startP && startP <= currentP) endP = billingPeriod(lease, currentP).end;
   if (lease.endDate && periodOf(lease.endDate) < endP) endP = periodOf(lease.endDate);
   const trackStart = lease.trackFrom ? `${lease.trackFrom}-01` : lease.startDate;
 

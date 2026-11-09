@@ -55,7 +55,9 @@ test('paid at the start of the quarter: one payment covers the 3 months, one rec
   const pays = [pay('2026-01-02', 255000)];
   const led = ledger(lease, pays, '2026-01-10');
   assert.equal(led.overdue, 0);
-  assert.equal(led.credit, 170000); // February and March, paid ahead
+  // the whole quarter is in the account from its first month: nothing left over (1.3.13)
+  assert.equal(led.credit, 0);
+  assert.deepEqual(led.rows.map((r) => [r.period, r.status]), [['2026-01', 'paid'], ['2026-02', 'paid'], ['2026-03', 'paid']]);
   const r = periodReceipt(lease, pays, '2026-01', '2026-01-10');
   assert.equal(r.status, 'paid');
   assert.equal(r.months, 3);

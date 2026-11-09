@@ -179,11 +179,16 @@ test('lease form: correcting the rent fixes the amount in force and keeps the hi
   const two = { startDate: '2024-01-01', rents: [
     { from: '2024-01', rent: 60000, charges: 5000, reason: 'initial' },
     { from: '2026-01', rent: 62000, charges: 5000, reason: 'indexation' },
-    { from: '2027-01', rent: 62000, charges: 6000, reason: 'manual' }, // a change planned later stays
+    { from: '2027-01', rent: 62000, charges: 6000, reason: 'manual' }, // new charges planned later: they stay
   ] };
   assert.equal(rentEntryToCorrect(two, '2026-11-06').from, '2026-01');
+  // the planned entry only carried the mistyped rent forward: it takes the corrected one (1.3.13)
   assert.deepEqual(correctRent(two, '2026-11-06', 61900, 5000).map((r) => [r.from, r.rent, r.charges, r.reason]),
-    [['2024-01', 60000, 5000, 'initial'], ['2026-01', 61900, 5000, 'indexation'], ['2027-01', 62000, 6000, 'manual']]);
+    [['2024-01', 60000, 5000, 'initial'], ['2026-01', 61900, 5000, 'indexation'], ['2027-01', 61900, 6000, 'manual']]);
+  // a later entry that set its own rent keeps it
+  const own = { ...two, rents: [...two.rents.slice(0, 2), { from: '2027-01', rent: 65000, charges: 5000, reason: 'manual' }] };
+  assert.deepEqual(correctRent(own, '2026-11-06', 61900, 5000).map((r) => [r.from, r.rent, r.charges]),
+    [['2024-01', 60000, 5000], ['2026-01', 61900, 5000], ['2027-01', 65000, 5000]]);
   // a lease that ended: the amount at its end; one starting later: its first amount
   assert.equal(rentEntryToCorrect({ ...two, endDate: '2025-06-30' }, '2026-11-06').from, '2024-01');
   assert.equal(rentEntryToCorrect({ startDate: '2027-02-01', rents: [{ from: '2027-02', rent: 1, charges: 0 }] }, '2026-11-06').from, '2027-02');

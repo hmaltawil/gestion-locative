@@ -3,7 +3,7 @@ import {
   periodOf, todayStr, uid, addDays,
 } from './util.js';
 import {
-  billingPeriod, correctRent, currentRent, dueDateFor, firstTrackedPeriod, frequencyOf, indexationStatus, isActive, ledger, monthOverview,
+  billingPeriod, changeRentFrom, correctRent, currentRent, dueDateFor, firstTrackedPeriod, frequencyOf, indexationStatus, isActive, ledger, monthOverview,
   nextPayment, periodReceipt, rentAt, rentCallBalance, rentEntryToCorrect, sortedRents, timingOf,
 } from './calc.js';
 import { fetchInseeIrl, fmtIrlKey, irlKey, irlTable, latestIrlKey } from './irl.js';
@@ -31,7 +31,7 @@ import {
 } from './checks.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.3.12';
+export const APP_VERSION = '1.3.13';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -1881,7 +1881,8 @@ function paymentSheet(leaseId) {
   const thisMonth = row ? row.total - row.paid : 0;
   const suggestions = [];
   if (led.owed > 0) suggestions.push([t('allOwed'), led.owed]);
-  if (thisMonth > 0 && thisMonth !== led.owed) suggestions.push([t('thisMonthOnly'), thisMonth]);
+  // (not for a lease paid every 3 or 6 months: its months are due together)
+  if (frequencyOf(l) === 1 && thisMonth > 0 && thisMonth !== led.owed) suggestions.push([t('thisMonthOnly'), thisMonth]);
   const cur = currentRent(l, td);
   if (!suggestions.length) suggestions.push([t('oneMonth'), cur.rent + cur.charges]);
   const methods = ['transfer', 'cheque', 'cash', 'directDebit', 'caf', 'other'];
@@ -1940,13 +1941,18 @@ function receiptSheet(leaseId) {
 
 function changeRentSheet(leaseId) {
   const l = leaseOf(leaseId);
-  const cur = currentRent(l, today());
+  // The amounts shown are those in force in the chosen month (a revision or
+  // new charges already recorded for later months included), so saving never
+  // puts an older amount back by accident. See changes.changeRentMonth.
+  const from = addMonths(periodOf(today()), 1);
+  const cur = rentAt(l, from);
+  const shown = (v) => `data-shown="${esc(moneyInput(v))}"`;
   openSheet(t('changeRent'), `<form class="form" data-form="changeRent" data-lease="${l.id}">
       <p class="hint">${esc(t('changeRentHint'))}</p>
-      ${field(t('fromMonth'), input('from', addMonths(periodOf(today()), 1), 'type="month" required'))}
+      ${field(t('fromMonth'), input('from', from, 'type="month" required data-change="changeRentMonth"'))}
       <div class="grid2">
-        ${moneyField(t('rentHC'), 'rent', cur.rent, '', 'required')}
-        ${moneyField(t('charges'), 'charges', cur.charges)}
+        ${moneyField(t('rentHC'), 'rent', cur.rent, '', `required ${shown(cur.rent)}`)}
+        ${moneyField(t('charges'), 'charges', cur.charges, '', shown(cur.charges))}
       </div>
       ${field(t('note'), input('note', ''))}
       <button class="btn block" type="submit">${esc(t('save'))}</button>
@@ -2118,7 +2124,8 @@ const actions = {
     const info = indexationStatus(l, prop(l.propertyId), irlTable(state), today());
     const applyFrom = el.closest('form').elements.applyFrom.value || info.applyFrom;
     if (!passes(checkRevisionFrom(info, applyFrom))) return;
-    makePdf(() => indexationPdf(state, l, info, applyFrom));
+    // The charges named in the letter are those in force that month.
+    makePdf(() => indexationPdf(state, l, { ...info, charges: rentAt(l, applyFrom).charges }, applyFrom));
   },
 
   addTenantRow: () => {
@@ -2438,8 +2445,7 @@ const forms = {
     closeSheet();
     commit((s) => {
       const l = s.leases.find((x) => x.id === form.dataset.lease);
-      l.rents = (l.rents || []).filter((x) => x.from !== from);
-      l.rents.push({ from, rent, charges, reason: 'manual', note: f.get('note').trim() });
+      l.rents = changeRentFrom(l, from, { rent, charges }, { reason: 'manual', note: f.get('note').trim() });
     });
     toast(t('saved'));
   },
@@ -2453,9 +2459,8 @@ const forms = {
     closeSheet();
     commit((s) => {
       const x = s.leases.find((y) => y.id === l.id);
-      const cur = currentRent(x, today());
-      x.rents = (x.rents || []).filter((r) => r.from !== from);
-      x.rents.push({ from, rent: info.newRent, charges: cur.charges, reason: 'indexation', note: `IRL ${info.oldKey} → ${info.newKey}` });
+      // Only the rent changes: charges already recorded for that month or later stay.
+      x.rents = changeRentFrom(x, from, { rent: info.newRent }, { reason: 'indexation', note: `IRL ${info.oldKey} → ${info.newKey}` });
       x.irl = { quarter: x.irl.quarter, key: info.newKey, value: info.newValue };
       x.lastRevision = info.anniversary;
     });
@@ -2510,6 +2515,20 @@ const changes = {
     const box = f && f.querySelector('[data-freq-only]');
     if (box) box.hidden = el.value === '1';
     if (f && f.elements.periodAnchor && !f.elements.periodAnchor.value && f.elements.startDate.value) f.elements.periodAnchor.value = f.elements.startDate.value.slice(0, 7);
+  },
+  // "Change rent": another month chosen, so show the amounts in force in that
+  // month; an amount the user already typed is kept.
+  changeRentMonth: (el) => {
+    const f = el.form;
+    const l = f && leaseOf(f.dataset.lease);
+    if (!l || !/^\d{4}-\d{2}$/.test(el.value)) return;
+    const at = rentAt(l, el.value);
+    for (const k of ['rent', 'charges']) {
+      const inp = f.elements[k];
+      if (inp.value !== inp.dataset.shown) continue;
+      inp.value = moneyInput(at[k]);
+      inp.dataset.shown = inp.value;
+    }
   },
   leaseStart: (el) => {
     const tf = el.form && el.form.elements.trackFrom;
@@ -2782,9 +2801,9 @@ Object.assign(forms, {
       if (update && ses.newMonthly !== null && ses.newMonthly !== undefined) {
         const r = rentAt(x, newFrom);
         const replaced = (x.rents || []).find((y) => y.from === newFrom) || null;
-        x.rents = (x.rents || []).filter((y) => y.from !== newFrom);
-        x.rents.push({ from: newFrom, rent: r.rent, charges: ses.newMonthly, reason: 'regularization', regYear: year });
-        rentChange = { from: newFrom, replaced };
+        // Only the charges change: a rent revision already recorded stays.
+        x.rents = changeRentFrom(x, newFrom, { charges: ses.newMonthly }, { reason: 'regularization', regYear: year });
+        rentChange = { from: newFrom, replaced, charges: ses.newMonthly, before: r.charges };
       }
       x.regularizations = { ...(x.regularizations || {}), [year]: { date: today(), balance: reg.balance, actual: reg.actualTotal, provisions: reg.provisions, tenantShare: reg.tenantShare, rentChange } };
     });

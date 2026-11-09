@@ -138,15 +138,28 @@ export function depositSettlement(st, deductions, keysDate, date, returned = st.
 
 // The rent entries without the new monthly charges set by the reconciliation
 // of `year`, with any entry it replaced put back (tests: fixes.test.mjs).
+// Since 1.3.13 the record also says which charges it set and which were in
+// force before (`charges`, `before`): entries that took the new charges over
+// (a later entry, or a revision recorded in the same month) get the old ones back.
 export function undoRegRent(rents, year, rec) {
   const change = rec && rec.rentChange;
   const fromYear = (r) => r.reason === 'regularization' && (r.regYear === year || (change && r.from === change.from));
-  const out = rents.filter((r) => !fromYear(r));
+  const byFrom = (a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0);
+  const mine = change && rents.find((r) => fromYear(r) && r.from === change.from);
+  const out = rents.filter((r) => !fromYear(r)).map((r) => ({ ...r })).sort(byFrom);
+  if (change && Number.isFinite(change.charges) && Number.isFinite(change.before) && change.charges !== change.before) {
+    for (const r of out) {
+      if (r.from < change.from) continue;
+      if (r.charges !== change.charges) break;
+      r.charges = change.before;
+    }
+  }
   const back = change && change.replaced;
   if (back && /^\d{4}-\d{2}$/.test(String(back.from)) && !out.some((r) => r.from === back.from)) {
-    out.push({ ...back, rent: Number(back.rent) || 0, charges: Number(back.charges) || 0 });
+    // The reconciliation never changes the rent: a revision recorded since then is kept.
+    out.push({ ...back, rent: mine ? mine.rent : Number(back.rent) || 0, charges: Number(back.charges) || 0 });
   }
-  return out.sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0));
+  return out.sort(byFrom);
 }
 
 // Other leases of the same property that run at the same time as this one
