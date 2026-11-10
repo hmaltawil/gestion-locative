@@ -91,10 +91,10 @@
 - **Same web address as the owner's Deutschlernen site** (`hmaltawil.github.io`), so a browser that opens both shares this app's storage. The user's iPhone never opens it and the home-screen app has its own storage; the owner opens the support copy only from its home-screen icon.
 - **PDF fonts:** jsPDF's built-in Helvetica only has Windows-1252 letters. `pdfText()` (wrapped around `doc.text` and `doc.splitTextToSize` in `newDoc()`) simplifies other letters (Łukasz → Lukasz) instead of printing garbage. A full Unicode font is in the roadmap's Ideas.
 
-## Current state (9 Nov 2026)
+## Current state (10 Nov 2026)
 - **Done and checked on the iPhone:** versions 1.0 to 1.3.12 (the roadmap's Done table). Recent: 1.3.9 (second code review), 1.3.10 (Settings › Setup and support: steps to set up the user's iPhone from scratch, `setup1`…`setup8` in `i18n.js`), 1.3.11 (rent paid every 1, 3 or 6 months, in advance or in arrears; receipts and rent calls per period). 1.3.12 (8 Nov 2026) only removed unused code.
 - **Live, not yet checked on the iPhone:** 1.3.13 (9 Nov 2026), two money fixes from the third code review. 
-- **Ready, not live yet:** 1.3.14 (9 Nov 2026), on the branch `claude/intelligent-clarke-6p3lga`: taps after typing on the reconciliation and departure screens, an interrupted GitHub restore, unused code removed. It goes to `main` when the owner says so. The tap fix needs the owner's check on the iPhone (it could only be tested in Chromium).
+- **Live, not yet checked on the iPhone:** 1.3.14 (10 Nov 2026): taps after typing on the reconciliation and departure screens, an interrupted GitHub restore, unused code removed. The tap fix needs the owner's check on the iPhone (it could only be tested in Chromium).
 - **Left open on purpose:** the overdue charges reconciliation that drops off the deadlines list on 1 January; the owner wants to look into it first (roadmap, milestone 7).
 - **In use:** the user's iPhone holds their own data and backs up to its own private GitHub repository (connected 7 Nov 2026). The owner's old test repository `locatif-sauvegarde` and its token were deleted on 8 Nov 2026.
 - **Next:** milestone 7, fixes from real use, as they come up. Milestone 6 (bank import tuned to CIC and Crédit Agricole) is on hold; milestone 5 (import from Gestion Locative Facile) was dropped.
