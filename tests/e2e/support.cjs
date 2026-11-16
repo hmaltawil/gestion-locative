@@ -68,7 +68,7 @@ async function phone(browser, name) {
   const browser = await chromium.launch();
   const log = (...a) => console.log(...a);
   const connect = async (P, mode) => {
-    await P.nav('#/settings');
+    await P.nav('#/settings/backup');
     await P.page.selectOption('form[data-form=ghConnect] [name=mode]', mode);
     await P.page.fill('form[data-form=ghConnect] [name=repo]', 'me/backup');
     await P.page.fill('form[data-form=ghConnect] [name=token]', 'tok-123');
@@ -106,7 +106,7 @@ async function phone(browser, name) {
   await A.nav('#/expense-new'); await A.page.fill('input[name=description]', 'Plombier'); await A.page.fill('[name=amount]', '120'); await A.page.click('button[type=submit]');
   const before = repo.puts.length; const t0 = Date.now();
   while (repo.puts.length === before && Date.now() - t0 < 20000) await A.page.waitForTimeout(500);
-  await S.nav('#/settings');
+  await S.nav('#/settings/backup');
   log('support status:', (await S.page.textContent('#sync-status')).replace(/\s+/g, ' ').trim().slice(0, 70));
   await S.page.click('[data-action=supportRefresh]');
   await S.page.waitForTimeout(2500);
@@ -114,7 +114,7 @@ async function phone(browser, name) {
   const exp = await S.page.textContent('.content');
   log('after refresh: main phone expense visible:', exp.includes('Plombier'), '| local test expense replaced:', !exp.includes('Test support'));
   // anonymised support file
-  await S.nav('#/settings');
+  await S.nav('#/settings/support');
   const [dl] = await Promise.all([S.page.waitForEvent('download', { timeout: 8000 }), S.page.click('[data-action=supportExport]')]);
   await dl.saveAs(OUT + '/support.json');
   const txt = fs.readFileSync(OUT + '/support.json', 'utf8');

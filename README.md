@@ -7,8 +7,9 @@ What's done and what's planned: see [ROADMAP.md](ROADMAP.md). Notes for develope
 ## What it does
 
 **Everyday**
-- **Appearance:** light by default; dark or automatic (follows the iPhone) in Settings.
-- **Signature:** drawn once with a finger (Settings › Signature › Add a signature, in its own window so scrolling never leaves marks) and added to receipts, rent calls and letters.
+- **Settings** is organised like the iPhone's: a list of sections (Landlord, Automatic backup, Manual backup, Automatic copies, Language and appearance, Rent index, Setup and support, About), each opening its own page.
+- **Appearance:** light by default; dark or automatic (follows the iPhone) in Settings › Language and appearance.
+- **Signature:** drawn once with a finger (Settings › Landlord › Add a signature, in its own window so scrolling never leaves marks) and added to receipts, rent calls and letters.
 - **Properties and leases:** tenants and co-tenants, guarantor, deposit, payment day, energy rating (DPE), tenant insurance date.
 - **Rent tracking:** a month-by-month view with paid, partial, unpaid and late statuses. Payments always clear the oldest debt first. First and last months are pro-rated. Already-running leases can start with an opening balance. One-off charges or credits can be added to a lease. Rent can be paid every month, every 3 months or every 6 months, at the start or at the end of each period (set in the lease): months are only late after the agreed date, a period paid in advance is owed in full from that date, and receipts and rent calls cover the whole period.
 - **Monthly send:** all receipts or rent calls for a month. Each tenant's PDF goes out in one tap (their email is copied first), or everything can be saved as one PDF for printing.

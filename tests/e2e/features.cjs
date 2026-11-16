@@ -28,7 +28,7 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.waitForTimeout(800);
   step('setup');
-  await nav('#/settings');
+  await nav('#/settings/landlord');
   await page.fill('form[data-form=landlord] [name=name]', 'Marie Dupont');
   await page.fill('form[data-form=landlord] [name=address]', '12 rue des Lilas');
   await page.fill('form[data-form=landlord] [name=postalCode]', '69003');
@@ -190,7 +190,7 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await page.click('#sheet .sheet-head [data-action=closeSheet]');
 
   step('backup / wipe / restore');
-  await nav('#/settings');
+  await nav('#/settings/manual');
   // one tap when the file is ready, otherwise the two-step panel
   await page.waitForTimeout(1500);
   {
@@ -200,6 +200,7 @@ require('fs').mkdirSync(OUT, { recursive: true });
     if (sheet) await page.click('[data-action=backupSave]');
     await (await dlp).saveAs((typeof OUT !== 'undefined' ? OUT : __dirname) + '/backup.json');
   }
+  await nav('#/settings/about');
   await page.click('[data-action=wipe]');
   await page.waitForSelector('.welcome');
   await chooser(() => page.click('.welcome ~ .card [data-action=restore]'), OUT + '/backup.json');
@@ -211,7 +212,7 @@ require('fs').mkdirSync(OUT, { recursive: true });
 
   step('french');
   await page.click('#sheet .sheet-head [data-action=closeSheet]');
-  await nav('#/settings');
+  await nav('#/settings/display');
   await page.click('[data-action=lang][data-lang=fr]');
   await nav('#/'); await shot('12-home-fr');
   await nav('#/deadlines'); await shot('13-deadlines-fr');

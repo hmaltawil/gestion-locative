@@ -31,7 +31,7 @@ import {
 } from './checks.js';
 import { setLang, t } from './i18n.js';
 
-export const APP_VERSION = '1.3.14';
+export const APP_VERSION = '1.3.15';
 
 let state = emptyState();
 const root = document.getElementById('app');
@@ -157,6 +157,13 @@ const ICONS = {
   calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
   chart: '<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>',
   clip: '<path d="M20 11.5 12.2 19.3a5 5 0 0 1-7-7L13 4.5a3.3 3.3 0 0 1 4.7 4.7l-7.8 7.8a1.7 1.7 0 0 1-2.4-2.4l7.1-7.1"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
+  cloud: '<path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9a4.5 4.5 0 0 0 1 9z"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 3 2.5 15 0 18M12 3c-2.5 3-2.5 15 0 18"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/>',
 };
 
 function icon(name, cls = '') {
@@ -320,7 +327,7 @@ function viewHome() {
           <h2>${esc(t('welcomeTitle'))}</h2>
           <p>${esc(t('welcomeText'))}</p>
           <ol class="steps">
-            <li><a href="#/settings">${esc(t('step1'))}</a></li>
+            <li><a href="#/settings/landlord">${esc(t('step1'))}</a></li>
             <li><a href="#/property-edit/new">${esc(t('step2'))}</a></li>
             <li>${esc(t('step3'))}</li>
           </ol>
@@ -369,7 +376,7 @@ function viewHome() {
     body: `
       ${safetyBanners()}
       ${needsBackup() ? `<div class="banner warn"><span>${esc(state.settings.lastBackup ? t('backupOld', { date: fmtDate(state.settings.lastBackup) }) : t('backupNever'))}</span><button class="btn small" data-action="backup">${esc(t('backupNow'))}</button></div>` : ''}
-      ${!state.settings.landlord.name ? `<a class="banner" href="#/settings">${esc(t('missingLandlord'))}</a>` : ''}
+      ${!state.settings.landlord.name ? `<a class="banner" href="#/settings/landlord">${esc(t('missingLandlord'))}</a>` : ''}
       <div class="tiles">
         <div class="tile"><span class="tile-label">${esc(t('dueThisMonth'))}</span><span class="tile-value">${fmtMoney(ov.due)}</span></div>
         <div class="tile"><span class="tile-label">${esc(t('receivedThisMonth'))}</span><span class="tile-value">${fmtMoney(ov.received)}</span></div>
@@ -760,31 +767,68 @@ function viewExpenseForm(r) {
 
 // ---------------------------------------------------------------- settings
 
-function viewSettings() {
+// Settings, like the iPhone's: a list of sections, each opening its own page
+// (#/settings/<section>). The section names match the ones quoted in the
+// setup steps and the README ("Settings › Automatic backup"...).
+const SETTINGS_GROUPS = [
+  ['setGrpYou', ['landlord']],
+  ['setGrpSafety', ['backup', 'manual', 'copies']],
+  ['setGrpApp', ['display', 'irl']],
+  ['setGrpHelp', ['support', 'about']],
+];
+const SETTINGS_ICON = {
+  landlord: ['user', 'blue'], backup: ['cloud', 'green'], manual: ['download', 'teal'], copies: ['history', 'grey'],
+  display: ['globe', 'indigo'], irl: ['chart', 'orange'], support: ['help', 'blue'], about: ['info', 'grey'],
+};
+
+// The short status shown on the right of each row.
+function settingsStatus(id) {
   const s = state.settings;
-  const L = s.landlord;
-  const table = irlTable(state);
-  const latest = latestIrlKey(table);
-  const recent = Object.keys(table).sort().reverse().slice(0, 4);
+  if (id === 'landlord') return s.landlord.name || t('setNotSet');
+  if (id === 'backup') {
+    const g = gh();
+    if (!g) return t('setOff');
+    if (isViewer()) return t('setSupportCopy');
+    const m = syncMeta();
+    if (m.lastError) return `\u26a0\ufe0f ${t('setProblem')}`; // warning sign
+    if (!m.lastOk) return t('setNotYet');
+    // Short, like the iPhone: the time if it was today, otherwise the day.
+    const when = fmtDateTime(m.lastOk); // dd/mm/yyyy hh:mm
+    return when.slice(0, 10) === fmtDate(today()) ? when.slice(11) : when.slice(0, 5);
+  }
+  if (id === 'manual') return s.lastBackup ? fmtDate(s.lastBackup) : t('setNever');
+  if (id === 'copies') return '…'; // filled in once the copies are counted (mountAfterRender)
+  if (id === 'display') return s.lang === 'en' ? 'English' : 'Français';
+  if (id === 'irl') { const [y, q] = latestIrlKey(irlTable(state)).split('-Q'); return `${s.lang === 'en' ? 'Q' : 'T'}${q} ${y}`; }
+  if (id === 'about') return APP_VERSION;
+  return '';
+}
+
+function viewSettings(r) {
+  const sub = r && r.id;
+  if (sub && SETTINGS_ICON[sub]) {
+    return page({ title: t('set_' + sub), back: '#/settings', body: `<div class="settings-page">${settingsPage(sub)}</div>` });
+  }
   return page({
     title: t('tabSettings'),
-    body: `
-      <section class="card">
-        <h3>${esc(t('language'))}</h3>
-        <div class="segmented">
-          <button type="button" data-action="lang" data-lang="fr" class="${s.lang === 'fr' ? 'active' : ''}">Français</button>
-          <button type="button" data-action="lang" data-lang="en" class="${s.lang === 'en' ? 'active' : ''}">English</button>
-        </div>
-        <p class="hint">${esc(t('docsAlwaysFrench'))}</p>
-      </section>
-      <section class="card">
-        <h3>${esc(t('appearance'))}</h3>
-        <div class="segmented">
-          ${['light', 'dark', 'auto'].map((x) => `<button type="button" data-action="theme" data-theme="${x}" class="${(s.theme || 'light') === x ? 'active' : ''}">${esc(t('theme_' + x))}</button>`).join('')}
-        </div>
-        <p class="hint">${esc(t('themeHint'))}</p>
-      </section>
-      <form class="card form" data-form="landlord">
+    body: SETTINGS_GROUPS.map(([grp, ids]) => `<h4 class="set-group">${esc(t(grp))}</h4>
+      <section class="card flush"><ul class="list set-list">${ids.map((id) => {
+        const [ic, color] = SETTINGS_ICON[id];
+        return `<li><a class="row-link" href="#/settings/${id}">
+          <span class="set-icon ${color}">${icon(ic)}</span><span class="set-title">${esc(t('set_' + id))}</span>
+          <span class="row-end"><span class="set-status"${id === 'copies' ? ' id="copies-count"' : ''}>${esc(settingsStatus(id))}</span>${icon('chevron')}</span>
+        </a></li>`;
+      }).join('')}</ul></section>`).join(''),
+  });
+}
+
+// A section's own page. A card whose title repeats the page's loses it.
+const withoutTitle = (html) => html.replace(/<h3>[^<]*<\/h3>/, '');
+function settingsPage(id) {
+  const s = state.settings;
+  const L = s.landlord;
+  if (id === 'landlord') {
+    return `<form class="card form" data-form="landlord">
         <h3>${esc(t('landlordTitle'))}</h3>
         <p class="hint">${esc(t('landlordHint'))}</p>
         ${field(t('fullName'), input('name', L.name, 'autocomplete="name"'))}
@@ -807,16 +851,11 @@ function viewSettings() {
           <button class="btn secondary" type="button" data-action="sigOpen">${esc(t(s.signature ? 'changeSignature' : 'addSignature'))}</button>
           ${s.signature ? `<button class="btn ghost danger" type="button" data-action="sigRemove">${esc(t('remove'))}</button>` : ''}
         </div>
-      </section>
-      <section class="card">
-        <h3>${esc(t('irlTitle'))}</h3>
-        <ul class="list plain compact">${recent.map((k) => `<li><span>${esc(fmtIrlKey(k, s.lang))}</span><span>${table[k].toFixed(2).replace('.', ',')}</span></li>`).join('')}</ul>
-        <p class="hint">${esc(t('irlLatest', { key: fmtIrlKey(latest, s.lang) }))}${s.irlUpdated ? ' ' + esc(t('irlUpdatedOn', { date: fmtDate(s.irlUpdated) })) : ''}</p>
-        <button class="btn secondary" data-action="irlUpdate">${esc(t('irlUpdate'))}</button>
-      </section>
-      ${githubCard()}
-      <section class="card">
-        <h3>${esc(t('backupTitle'))}</h3>
+      </section>`;
+  }
+  if (id === 'backup') return withoutTitle(githubCard());
+  if (id === 'manual') {
+    return `<section class="card">
         <p class="hint">${esc(t('backupHint'))}</p>
         <p>${esc(s.lastBackup ? t('lastBackup', { date: fmtDate(s.lastBackup) }) : t('backupNever'))}</p>
         <div class="btn-row">
@@ -824,18 +863,44 @@ function viewSettings() {
           <button class="btn secondary" data-action="restore">${esc(t('restoreBtn'))}</button>
         </div>
         <p class="hint">${esc(t('dataCounts', { p: state.properties.length, l: state.leases.length, pay: state.payments.length, e: state.expenses.length }))} · ${esc(t('docCount', { n: state.documents.length }))}</p>
+      </section>`;
+  }
+  if (id === 'copies') return withoutTitle(snapshotsCard());
+  if (id === 'display') {
+    return `<section class="card">
+        <h3>${esc(t('language'))}</h3>
+        <div class="segmented">
+          <button type="button" data-action="lang" data-lang="fr" class="${s.lang === 'fr' ? 'active' : ''}">Français</button>
+          <button type="button" data-action="lang" data-lang="en" class="${s.lang === 'en' ? 'active' : ''}">English</button>
+        </div>
+        <p class="hint">${esc(t('docsAlwaysFrench'))}</p>
       </section>
-      ${snapshotsCard()}
-      ${setupCard()}
       <section class="card">
-        <h3>${esc(t('about'))}</h3>
-        <p class="hint">${esc(t('aboutText', { v: APP_VERSION }))}</p>
-        <button class="btn danger ghost" data-action="wipe">${esc(t('wipe'))}</button>
-        <p class="hint">${esc(t('wipeHint'))}</p>
-        <button class="btn danger ghost" data-action="eraseDevice">${esc(t('eraseDevice'))}</button>
-        <p class="hint">${esc(t('eraseDeviceHint'))}</p>
-      </section>`,
-  });
+        <h3>${esc(t('appearance'))}</h3>
+        <div class="segmented">
+          ${['light', 'dark', 'auto'].map((x) => `<button type="button" data-action="theme" data-theme="${x}" class="${(s.theme || 'light') === x ? 'active' : ''}">${esc(t('theme_' + x))}</button>`).join('')}
+        </div>
+        <p class="hint">${esc(t('themeHint'))}</p>
+      </section>`;
+  }
+  if (id === 'irl') {
+    const table = irlTable(state);
+    const latest = latestIrlKey(table);
+    const recent = Object.keys(table).sort().reverse().slice(0, 4);
+    return `<section class="card">
+        <ul class="list plain compact">${recent.map((k) => `<li><span>${esc(fmtIrlKey(k, s.lang))}</span><span>${table[k].toFixed(2).replace('.', ',')}</span></li>`).join('')}</ul>
+        <p class="hint">${esc(t('irlLatest', { key: fmtIrlKey(latest, s.lang) }))}${s.irlUpdated ? ' ' + esc(t('irlUpdatedOn', { date: fmtDate(s.irlUpdated) })) : ''}</p>
+        <button class="btn secondary" data-action="irlUpdate">${esc(t('irlUpdate'))}</button>
+      </section>`;
+  }
+  if (id === 'support') return withoutTitle(setupCard()).replace('<details>', '<details open>');
+  return `<section class="card">
+      <p class="hint">${esc(t('aboutText', { v: APP_VERSION }))}</p>
+      <button class="btn danger ghost" data-action="wipe">${esc(t('wipe'))}</button>
+      <p class="hint">${esc(t('wipeHint'))}</p>
+      <button class="btn danger ghost" data-action="eraseDevice">${esc(t('eraseDevice'))}</button>
+      <p class="hint">${esc(t('eraseDeviceHint'))}</p>
+    </section>`;
 }
 
 function notFound() {
@@ -1563,6 +1628,13 @@ async function cleanFiles() {
   } catch (e) { /* ignore */ }
 }
 
+// Settings list: how many automatic copies are on the phone.
+async function fillCopiesCount() {
+  const el = document.getElementById('copies-count');
+  if (!el) return;
+  try { el.textContent = String((await listSnapshots()).length); } catch (e) { el.textContent = ''; }
+}
+
 async function fillSnapshotList() {
   const box = document.getElementById('snap-list');
   if (!box) return;
@@ -1710,12 +1782,12 @@ function safetyBanners() {
   const m = syncMeta();
   let out = '';
   if (!isViewer() && (m.lastError === 'conflict' || m.lastError === 'shrink')) {
-    out += `<a class="banner warn" href="#/settings">${esc(t(m.lastError === 'shrink' ? 'syncShrinkBanner' : 'syncConflictBanner'))}</a>`;
+    out += `<a class="banner warn" href="#/settings/backup">${esc(t(m.lastError === 'shrink' ? 'syncShrinkBanner' : 'syncConflictBanner'))}</a>`;
   } else if (!isViewer() && m.lastError && (!m.lastOk || m.lastOk.slice(0, 10) < addDays(today(), -2))) {
-    out += `<a class="banner warn" href="#/settings">${esc(t('syncFailingBanner', { reason: t('syncErr_' + m.lastError) }))}</a>`;
+    out += `<a class="banner warn" href="#/settings/backup">${esc(t('syncFailingBanner', { reason: t('syncErr_' + m.lastError) }))}</a>`;
   }
   if (g.tokenExpires && g.tokenExpires <= addDays(today(), 14)) {
-    out += `<a class="banner warn" href="#/settings">${esc(t('tokenExpiring', { date: fmtDate(g.tokenExpires) }))}</a>`;
+    out += `<a class="banner warn" href="#/settings/backup">${esc(t('tokenExpiring', { date: fmtDate(g.tokenExpires) }))}</a>`;
   }
   return out;
 }
@@ -1885,8 +1957,10 @@ function prepareBackup() {
 
 function mountAfterRender(r) {
   if (r.name === 'settings') {
-    fillSnapshotList();
-    prepareBackup();
+    if (!r.id) fillCopiesCount();
+    if (r.id === 'copies') fillSnapshotList();
+    // The manual backup file is made in advance, so the share menu opens on the tap (iOS).
+    if (r.id === 'manual') prepareBackup();
   }
   if (r.name === 'home' && needsBackup()) prepareBackup();
 }

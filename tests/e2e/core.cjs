@@ -17,12 +17,23 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await shot('01-welcome');
 
   // landlord
-  await nav('#/settings');
+  await nav('#/settings/landlord');
   await page.fill('form[data-form=landlord] [name=name]', 'Marie Dupont');
   await page.fill('form[data-form=landlord] [name=address]', '12 rue des Lilas');
   await page.fill('form[data-form=landlord] [name=postalCode]', '69003');
   await page.fill('form[data-form=landlord] [name=city]', 'Lyon');
   await page.click('form[data-form=landlord] button[type=submit]');
+  // Settings like the iPhone's (1.3.15): a list of 8 sections, each with its own page and a back button
+  await nav('#/settings');
+  const rows = await page.$$eval('.set-list .row-link', (a) => a.map((x) => [x.getAttribute('href'), x.querySelector('.set-status').textContent.trim()]));
+  console.log('settings sections:', rows.length, '| landlord status:', rows[0][1]);
+  if (rows.length !== 8 || rows[0][1] !== 'Marie Dupont') throw new Error('settings list wrong');
+  for (const [href] of rows) {
+    await nav(href);
+    const back = await page.getAttribute('.topbar a.icon-btn', 'href');
+    if (back !== '#/settings' || !(await page.textContent('h1')).trim()) throw new Error(`settings page ${href} has no title or back button`);
+  }
+  await nav('#/settings/landlord');
   // signature: no pad on the page itself (scrolling past it used to leave marks)
   console.log('signature pad on the settings page:', await page.locator('#app #sigpad').count());
   await page.click('[data-action=sigOpen]');
@@ -36,6 +47,7 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await page.waitForSelector('#app .sig-preview');
   console.log('signature saved, sheet closed:', (await page.locator('#sheet').count()) === 0);
   // setup steps for the user's iPhone (1.3.10): 8 steps, with the app's own address
+  await nav('#/settings/support'); // setup steps have their own section since 1.3.15
   const steps = await page.$$eval('details ol.steps li', (li) => li.map((x) => x.textContent));
   const setup = steps.filter((x) => /new private repository|Read-only|Add to Home Screen/.test(x));
   console.log('setup steps:', setup.length, '| app address in them:', steps.some((x) => x.includes('localhost:8080/')));
@@ -157,7 +169,7 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await shot('10-expenses');
 
   // backup
-  await nav('#/settings');
+  await nav('#/settings/manual');
   // one tap when the file is ready, otherwise the two-step panel
   await page.waitForTimeout(1500);
   {
@@ -204,7 +216,7 @@ require('fs').mkdirSync(OUT, { recursive: true });
   console.log('edit form shows the start of tracking:', await page.inputValue('form[data-form=lease] [name=trackFrom]'));
 
   // French UI
-  await nav('#/settings');
+  await nav('#/settings/display');
   await page.click('[data-action=lang][data-lang=fr]');
   await nav('#/');
   await page.waitForSelector('.tiles');

@@ -85,11 +85,12 @@ async function phone(browser, name) {
   await page.waitForTimeout(500);
 
   // snapshots: a daily copy exists
-  await nav('#/settings');
+  await nav('#/settings/copies');
   await page.waitForSelector('#snap-list .row');
   log('snapshots after first data:', await page.locator('#snap-list .row').count(), '-', (await page.textContent('#snap-list .row')).replace(/\s+/g, ' ').trim().slice(0, 60));
 
   // wrong token / public repo are refused
+  await nav('#/settings/backup');
   await page.fill('form[data-form=ghConnect] [name=repo]', 'https://github.com/me/backup');
   await page.fill('form[data-form=ghConnect] [name=token]', 'wrong');
   await page.fill('form[data-form=ghConnect] [name=passphrase]', 'cheval batterie agrafe correct');
@@ -132,7 +133,7 @@ async function phone(browser, name) {
   await page.click('[data-action=deleteLease]');
   await page.waitForURL(/#\/leases/);
   log('leases after delete:', await page.evaluate(() => document.querySelectorAll('.list .row-link').length));
-  await nav('#/settings');
+  await nav('#/settings/copies');
   await page.waitForSelector('#snap-list .row');
   log('latest snapshot:', (await page.textContent('#snap-list .row')).replace(/\s+/g, ' ').trim().slice(0, 50));
   await page.click('#snap-list [data-action=snapRestore] >> nth=0');
@@ -141,14 +142,14 @@ async function phone(browser, name) {
   log('leases after snapshot restore:', await page.locator('.list .row-link').count());
 
   // one-tap manual backup
-  await nav('#/settings');
+  await nav('#/settings/manual');
   await page.waitForTimeout(1500);
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 8000 }), page.click('.card [data-action=backup]')]);
   log('one-tap backup downloaded:', dl.suggestedFilename(), '| sheet opened:', await page.locator('#sheet').count());
 
   // ---------- second phone restores from GitHub ----------
   const B = await phone(browser, 'phoneB');
-  await B.nav('#/settings');
+  await B.nav('#/settings/backup');
   await B.page.fill('form[data-form=ghConnect] [name=repo]', 'me/backup');
   await B.page.fill('form[data-form=ghConnect] [name=token]', 'tok-123');
   await B.page.fill('form[data-form=ghConnect] [name=passphrase]', 'cheval batterie agrafe correct');
@@ -169,7 +170,7 @@ async function phone(browser, name) {
   const stillEmpty = await B.page.locator('.welcome').count();
   log('restore interrupted at the last step:', dropToast, '| phone B still empty:', stillEmpty === 1);
   if (stillEmpty !== 1) throw new Error('an interrupted restore replaced the data in memory');
-  await B.nav('#/settings'); await B.page.click('[data-action=ghRestore]');
+  await B.nav('#/settings/backup'); await B.page.click('[data-action=ghRestore]');
   await B.page.waitForSelector('#sheet [data-action=ghRestoreVersion]', { timeout: 10000 });
   await B.page.click('#sheet [data-action=ghRestoreVersion] >> nth=0');
   await B.page.waitForSelector('.tiles', { timeout: 15000 });
@@ -180,7 +181,7 @@ async function phone(browser, name) {
 
   // wrong passphrase on a third phone
   const C = await phone(browser, 'phoneC');
-  await C.nav('#/settings');
+  await C.nav('#/settings/backup');
   await C.page.fill('form[data-form=ghConnect] [name=repo]', 'me/backup');
   await C.page.fill('form[data-form=ghConnect] [name=token]', 'tok-123');
   await C.page.fill('form[data-form=ghConnect] [name=passphrase]', 'not the right phrase');
@@ -193,10 +194,10 @@ async function phone(browser, name) {
 
   // wipe, then restore the "before erasing" snapshot
   const markWipe = repo.puts.length;
-  await nav('#/settings');
+  await nav('#/settings/about');
   await page.click('[data-action=wipe]');
   await page.waitForSelector('.welcome');
-  await nav('#/settings');
+  await nav('#/settings/copies');
   await page.waitForSelector('#snap-list .row');
   await page.click('#snap-list [data-action=snapRestore] >> nth=0');
   await page.waitForTimeout(800);
@@ -212,7 +213,7 @@ async function phone(browser, name) {
     return repo.puts.slice(from).some((x) => x.who === who && x.path === 'backup/data.json.enc');
   };
   log('phone A saved after the snapshot restore:', await waitPut('phoneA', markWipe));
-  await B.nav('#/settings'); await B.page.click('[data-action=ghRestore]');
+  await B.nav('#/settings/backup'); await B.page.click('[data-action=ghRestore]');
   await B.page.waitForSelector('#sheet [data-action=ghRestoreVersion]', { timeout: 10000 });
   await B.page.click('#sheet [data-action=ghRestoreVersion] >> nth=0');
   await B.page.waitForSelector('.tiles', { timeout: 15000 });
@@ -226,13 +227,13 @@ async function phone(browser, name) {
   await nav('#/expense-new');
   await page.fill('input[name=description]', 'Peintre'); await page.fill('[name=amount]', '300');
   await page.click('button[type=submit]');
-  await nav('#/settings');
+  await nav('#/settings/backup');
   await page.waitForSelector('[data-action=syncForce]', { timeout: 25000 });
   log('phone A, behind, did not overwrite:', repo.files.get('backup/data.json.enc').text === latest && !repo.puts.slice(mark).some((x) => x.who === 'phoneA' && x.path === 'backup/data.json.enc'));
   log('phone A status:', (await page.textContent('#sync-status')).replace(/\s+/g, ' ').trim().slice(0, 70));
   await nav('#/');
   log('home banner:', (await page.textContent('.banner.warn')).trim().slice(0, 60));
-  await nav('#/settings');
+  await nav('#/settings/backup');
   await page.click('[data-action=syncForce]');
   log('after "save anyway", phone A saved:', await waitPut('phoneA', mark));
   if (repo.files.get('backup/data.json.enc').text === latest) throw new Error('save anyway did not save');

@@ -4,7 +4,7 @@ One place to see what's open, what's next and what's done. Update it at the end 
 
 **Status:** ✅ done · 🔜 next · ⏳ open · ⏸️ on hold · ❌ dropped · 💡 idea, not planned yet
 
-**Where we are (10 Nov 2026):** version 1.3.12 is live and checked on the iPhone. Version 1.3.13 (two money fixes from the third code review) went live on 9 Nov 2026 and version 1.3.14 (three smaller fixes) on 10 Nov 2026: both **wait for your check on the iPhone**. The user runs the app on their own iPhone, enters their own data, and backs up to their own private GitHub repository. **Next:** milestone 7, fixes from real use, as they come up. What's still open is listed just below.
+**Where we are (16 Nov 2026):** versions up to 1.3.14 are live and checked on the iPhone. Version 1.3.15 (Settings organised like the iPhone's) **waits for your check on the iPhone**. The user runs the app on their own iPhone, enters their own data, and backs up to their own private GitHub repository. **Next:** milestone 7, fixes from real use, as they come up. What's still open is listed just below.
 
 ## Open items
 
@@ -25,13 +25,17 @@ One place to see what's open, what's next and what's done. Update it at the end 
 ## Next
 
 ### 🔜 Milestone 7 · Version 1.4 · Fixes from real use
-- [x] **1.3.13, third code review (live since 9 Nov 2026, [`c331ab0`](https://github.com/hmaltawil/gestion-locative/commit/c331ab0), to check on the iPhone):**
+- [x] **1.3.13, third code review (live since 9 Nov 2026, [`c331ab0`](https://github.com/hmaltawil/gestion-locative/commit/c331ab0), checked on the iPhone 16 Nov 2026):**
   - A rent revision and new monthly charges (from a charges reconciliation or "Change rent") recorded for different months no longer undo each other; recorded for the same month, both are kept. Undoing a reconciliation gives the old charges back and keeps the revision. "Change rent" shows the amounts in force in the month you choose.
   - A lease paid **in advance** every 3 or 6 months and not paid owes the whole period from its payment date (before: one more month each month), on the home screen, the lease page, the reminder and the formal notice.
-- [x] **1.3.14, the smaller findings of the third code review (live since 10 Nov 2026, [`e994949`](https://github.com/hmaltawil/gestion-locative/commit/e994949), to check on the iPhone):**
-  - Charges reconciliation and departure screens: a tap made right after typing is no longer lost. The button acts on the first tap with what was just typed, and tapping the next field leaves it ready to type in. Tested with a mouse and an emulated finger; **to check on the iPhone**.
+- [x] **1.3.14, the smaller findings of the third code review (live since 10 Nov 2026, [`e994949`](https://github.com/hmaltawil/gestion-locative/commit/e994949), checked on the iPhone 16 Nov 2026):**
+  - Charges reconciliation and departure screens: a tap made right after typing is no longer lost. The button acts on the first tap with what was just typed, and tapping the next field leaves it ready to type in. Tested with a mouse and an emulated finger, then on the owner's and the user's iPhones.
   - A restore from GitHub interrupted at its last step (connection lost) now leaves the phone's data as it was; before, the restored data stayed in memory, unsaved.
   - Unused code removed: the old "end lease" window.
+- [x] **1.3.15, Settings organised like the iPhone's (16 Nov 2026), to check on the iPhone:**
+  - Settings is a list of sections in four groups (You · Data safety · App · Help), each row with a coloured icon, a short status on the right (your name, the last backup, the number of copies, the language, the latest IRL, the version) and an arrow. Each section opens its own page with a back button: Landlord (details and signature), Automatic backup, Manual backup, Automatic copies, Language and appearance, Rent index (IRL), Setup and support, About (and the two erase buttons)
+  - The section names stay the ones used in the setup steps and the README ("Settings › Automatic backup"…); the home warnings open the right section directly. Nothing about the data changes
+  - To check: Settings shows the list; each row opens its page; ‹ comes back; the manual backup still opens the share menu at the first tap
 - [ ] **To look into (your decision), from the third code review: an overdue charges reconciliation disappears from the deadlines list.**
   - What happens today: the deadlines list only reminds you of the reconciliation for **last year**. During 2026 it shows "Charges reconciliation 2025" with the date 31 Dec 2026. On 1 Jan 2027 the list moves on to 2026, and the line for 2025 is gone, even if you never did it.
   - Why it matters: you can still do the 2025 reconciliation after that date (charges can be claimed for 3 years, and the app handles a late one), but nothing reminds you any more.
@@ -122,6 +126,8 @@ Every version below is live and was checked on the iPhone. Details are in each c
 | 1.3.10 | 7 Nov 2026 | Settings › Setup and support: steps to set up the user's iPhone from scratch with its own backup repository | [`77ddd25`](https://github.com/hmaltawil/gestion-locative/commit/77ddd25) |
 | 1.3.11 | 7 Nov 2026 | Rent paid every 3 or 6 months, in advance or in arrears: no false "late", one receipt and one rent call per period | [`70433ee`](https://github.com/hmaltawil/gestion-locative/commit/70433ee) |
 | 1.3.12 | 8 Nov 2026 | Housekeeping: unused code removed, no visible change | [`70985ad`](https://github.com/hmaltawil/gestion-locative/commit/70985ad) |
+| 1.3.13 | 9 Nov 2026 | Third code review: a revision and new charges in different months no longer undo each other; an unpaid period paid in advance owes the whole period | [`c331ab0`](https://github.com/hmaltawil/gestion-locative/commit/c331ab0) |
+| 1.3.14 | 10 Nov 2026 | A tap right after typing is no longer lost; an interrupted GitHub restore leaves the data as it was | [`e994949`](https://github.com/hmaltawil/gestion-locative/commit/e994949) |
 
 ## How we work
 

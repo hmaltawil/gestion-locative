@@ -355,3 +355,18 @@ fieldset.card:disabled { opacity: .75; }
   .list.cols > li.row > :nth-child(2) { justify-self: end; }
   .list.cols > li.row > :nth-child(3) { justify-self: center; }
 }
+
+/* Settings, like the iPhone's: grouped rows with a coloured icon, a status and an arrow (1.3.15) */
+h4.set-group { margin: 18px 6px 6px; }
+h4.set-group:first-child { margin-top: 4px; }
+.set-list > li:first-child, .card.flush .set-list > li:first-child { border-top: 0; }
+.set-list .row-link { justify-content: flex-start; padding: 10px 14px; min-height: 48px; }
+.set-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: #fff; flex: none; }
+.set-list .row-link > .set-icon { flex: 0 0 30px; } /* not stretched like the first item of other lists */
+.set-icon .icon { width: 18px; height: 18px; }
+.set-icon.blue { background: #2f6fed; } .set-icon.green { background: #2fa86b; } .set-icon.teal { background: #1a9aa8; }
+.set-icon.grey { background: #8a8f98; } .set-icon.indigo { background: #5b5bd6; } .set-icon.orange { background: #e08a1e; }
+/* As on the iPhone, the status is shortened before the title is */
+.set-title { flex: 0 0 auto; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-list .row-end { flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
+.set-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }

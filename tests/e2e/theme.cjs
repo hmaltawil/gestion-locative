@@ -17,7 +17,8 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await page.waitForSelector('.welcome');
   console.log('default on a dark iPhone:', await bg(), JSON.stringify(await state()));
   await page.screenshot({ path: OUT + '/light-home.png' });
-  await page.evaluate(() => { location.hash = '#/settings'; });
+  // appearance has its own section since 1.3.15
+  await page.evaluate(() => { location.hash = '#/settings/display'; });
   await page.waitForSelector('[data-action=theme]');
   await page.screenshot({ path: OUT + '/light-settings.png' });
   await page.click('[data-action=theme][data-theme=dark]');

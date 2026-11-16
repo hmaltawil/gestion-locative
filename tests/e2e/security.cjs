@@ -65,11 +65,11 @@ async function github(route) {
     payments: [], expenses: [], reminders: [], documents: [],
   };
   require('fs').writeFileSync(OUT + '/crafted.json', JSON.stringify(crafted));
-  await nav('#/settings');
+  await nav('#/settings/manual');
   const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('.card [data-action=restore]')]);
   await fc.setFiles(OUT + '/crafted.json');
   await page.waitForSelector('.tiles', { timeout: 10000 });
-  for (const h of ['#/', '#/settings', '#/properties', '#/leases', '#/deadlines']) await nav(h);
+  for (const h of ['#/', '#/settings', ...['landlord', 'backup', 'manual', 'copies', 'display', 'irl', 'support', 'about'].map((x) => `#/settings/${x}`), '#/properties', '#/leases', '#/deadlines']) await nav(h);
   await page.click('text=Flat'); await page.waitForTimeout(200);
   await nav('#/leases'); await page.click('text=Jean'); await page.waitForTimeout(300);
   const ran = await page.evaluate(() => !!window.__ran);
@@ -118,7 +118,7 @@ async function github(route) {
   await page.reload();
   await nav('#/');
   await page.waitForSelector('.tiles');
-  await nav('#/settings');
+  await nav('#/settings/backup');
   await page.fill('form[data-form=ghConnect] [name=repo]', 'me/backup');
   await page.fill('form[data-form=ghConnect] [name=token]', 'tok');
   dialogs.length = 0;
@@ -132,18 +132,19 @@ async function github(route) {
   await page.click('form[data-form=ghConnect] button[type=submit]');
   await page.waitForFunction(() => /Last automatic backup/.test((document.getElementById('sync-status') || {}).textContent || ''), null, { timeout: 20000 });
   log('first backup:', repo.puts.filter((p) => p.endsWith('data.json.enc')).length, 'upload');
+  await nav('#/settings/about');
   await page.click('[data-action=wipe]');
   await page.waitForSelector('.welcome');
   const before = repo.puts.length;
   await nav('#/property-edit/new');
   await page.fill('[name=name]', 'New start'); await page.click('button[type=submit]'); await page.waitForURL(/#\/property\//);
-  await nav('#/settings');
+  await nav('#/settings/backup');
   await page.waitForSelector('[data-action=syncForce]', { timeout: 25000 });
   log('after erasing, backup paused instead of replaced:', repo.puts.length === before, '|', (await page.textContent('#sync-status')).replace(/\s+/g, ' ').trim().slice(0, 80));
   if (repo.puts.length !== before) throw new Error('the backup was replaced after an erase');
   await nav('#/');
   log('home banner:', (await page.textContent('.banner.warn')).trim().slice(0, 50));
-  await nav('#/settings');
+  await nav('#/settings/backup');
   await page.click('[data-action=syncForce]');
   const t0 = Date.now();
   while (repo.puts.length === before && Date.now() - t0 < 20000) await page.waitForTimeout(500);
